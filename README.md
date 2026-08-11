@@ -2,7 +2,7 @@
 
 Applies Altimiser's approved changes to a Statamic site. It implements the [receiver protocol](https://github.com/alt-design/altimiser/blob/main/docs/receiver-protocol.md), so it is one possible receiver rather than the only shape one can take.
 
-**Tests for this package live in [alt-design/altimiser](https://github.com/alt-design/altimiser)**, which installs it as a dev dependency. They are there rather than here because what is worth proving is that both ends of the protocol still agree, and only that repository has both.
+The two repositories do not depend on each other. Each is held to the written protocol rather than to the other's implementation, which is what lets a receiver in another language be written against the same document.
 
 ## Installing
 
@@ -210,10 +210,17 @@ Every change carries the value the scan saw. If what is on the site no longer ma
 
 ## Testing
 
-The parts worth testing, `FieldResolver`, `TemplatePatcher` and `EditValidator`, take plain arrays and strings and have no Statamic dependency. They are exercised from the central application's suite via `tests/Feature/FieldResolverTest.php` and `tests/Feature/TemplatePatcherTest.php`, which is why the addon has no bootstrapped CMS of its own.
+```bash
+composer install
+./vendor/bin/pest
+```
+
+Testbench provides a container and a config array, and that is all these tests need. The addon's service provider is deliberately never registered: it extends Statamic's own, so booting it would drag a CMS in to exercise classes that take plain arrays and strings. What is under test is the applying logic, not how Statamic discovers it.
+
+`ChangeRequestHandlingTest` is this package's half of the protocol. A protocol-shaped payload, signed the way the document describes, travels through verification and dispatch and lands as a real edit to a real file, with nothing imported from the central service. `SignatureTest` computes the HMAC from the protocol description for the same reason. Together they are what any receiver has to prove, in any language.
 
 `EditValidator` is the one to read first if you are reviewing this for safety: every rule that stops a model's output reaching a client's template is there, and each has a test that proves the file is left untouched when the rule fires.
 
-`ContentApplier`'s git behaviour is covered in `tests/Feature/ContentGitCommitTest.php` against a stub entry, which is why `ContentResolver::find()` returns `?object` rather than `?Entry`.
+`ContentApplier`'s git behaviour is covered against a stub entry, which is why `ContentResolver::find()` returns `?object` rather than `?Entry`.
 
-`AssetApplier` and `TemplateLocator` are the exceptions: their Statamic glue (`Asset::findByUrl`, `$entry->template()`, `$asset->set()->save()`) is not covered and would need a Statamic test harness to exercise properly. Both are deliberately thin for that reason.
+`AssetApplier` and `TemplateLocator` are the exceptions: their Statamic glue (`Asset::findByUrl`, `$entry->template()`, `$asset->set()->save()`) is not covered and would need a booted CMS to exercise properly. Both are deliberately thin for that reason.
