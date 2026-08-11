@@ -1,0 +1,28 @@
+{
+    "name": "alt-design/altimiser-statamic",
+    "description": "Applies Altimiser's approved SEO and performance changes to a Statamic site.",
+    "type": "statamic-addon",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.3",
+        "statamic/cms": "^5.0 || ^6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "AltDesign\\Altimiser\\": "src"
+        }
+    },
+    "extra": {
+        "statamic": {
+            "name": "Altimiser",
+            "description": "Applies Altimiser's approved SEO and performance changes."
+        },
+        "laravel": {
+            "providers": [
+                "AltDesign\\Altimiser\\ServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
