@@ -2,6 +2,7 @@
 
 namespace AltDesign\Altimiser;
 
+use Composer\InstalledVersions;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Statamic\Facades\Site;
@@ -10,6 +11,21 @@ use Throwable;
 
 class Altimiser
 {
+    /**
+     * The installed version of this package, read from composer rather than
+     * written down here. A number maintained by hand drifts from the tag it is
+     * supposed to name, and a receiver reporting a version nobody released
+     * tells you less than reporting nothing.
+     */
+    public function version(): ?string
+    {
+        try {
+            return InstalledVersions::getPrettyVersion('alt-design/altimiser-statamic');
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     public function isConnected(): bool
     {
         return filled(config('altimiser.url')) && filled(config('altimiser.secret'));

@@ -3,6 +3,7 @@
 namespace AltDesign\Altimiser\Http\Controllers;
 
 use AltDesign\Altimiser\AdvertisedChecks;
+use AltDesign\Altimiser\Altimiser;
 use AltDesign\Altimiser\Applying\AiTemplateEditor;
 use AltDesign\Altimiser\Applying\GitRepository;
 use AltDesign\Altimiser\Integrations\AltSeo;
@@ -17,7 +18,7 @@ class HealthController
     {
         return response()->json([
             'receiver' => 'statamic',
-            'receiver_version' => '0.4.0',
+            'receiver_version' => app(Altimiser::class)->version(),
             'cms_version' => $this->cmsVersion(),
             'capabilities' => $this->capabilities(),
             'checks' => app(AdvertisedChecks::class)->all(),

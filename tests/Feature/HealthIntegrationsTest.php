@@ -1,7 +1,9 @@
 <?php
 
 use AltDesign\Altimiser\AdvertisedChecks;
+use AltDesign\Altimiser\Altimiser;
 use AltDesign\Altimiser\Integrations\AltSeo;
+use Composer\InstalledVersions;
 
 /** An Alt SEO whose answers we choose, since the test harness has none installed. */
 function altSeoReporting(bool $installed, bool $schemaEnabled, ?string $version = null): AltSeo
@@ -47,4 +49,12 @@ it('reports what Alt SEO on this site can do', function () {
         ->and($state['installed'])->toBeFalse()
         ->and($state['schema_enabled'])->toBeFalse()
         ->and($state['version'])->toBeNull();
+});
+
+it('reports the version composer actually installed', function () {
+    // Not a literal in the controller: a hand-maintained number drifts from the
+    // tag, which is how the receiver came to announce a 0.4.0 that was never
+    // released.
+    expect((new Altimiser)->version())
+        ->toBe(InstalledVersions::getPrettyVersion('alt-design/altimiser-statamic'));
 });
