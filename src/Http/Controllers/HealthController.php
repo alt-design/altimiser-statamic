@@ -2,11 +2,14 @@
 
 namespace AltDesign\Altimiser\Http\Controllers;
 
+use AltDesign\Altimiser\AdvertisedChecks;
 use AltDesign\Altimiser\Applying\AiTemplateEditor;
 use AltDesign\Altimiser\Applying\GitRepository;
+use AltDesign\Altimiser\Integrations\AltSeo;
 use Illuminate\Http\JsonResponse;
 use Statamic\Facades\Site;
 use Statamic\Statamic;
+use Throwable;
 
 class HealthController
 {
@@ -15,12 +18,27 @@ class HealthController
         return response()->json([
             'receiver' => 'statamic',
             'receiver_version' => '0.4.0',
-            'cms_version' => Statamic::version(),
+            'cms_version' => $this->cmsVersion(),
             'capabilities' => $this->capabilities(),
-            'checks' => $this->checks(),
+            'checks' => app(AdvertisedChecks::class)->all(),
             'git' => $this->git(),
+            'integrations' => ['alt_seo' => app(AltSeo::class)->state()],
             'site_url' => Site::default()->absoluteUrl(),
         ]);
+    }
+
+    /**
+     * Statamic reads its own version out of composer.lock, which some deploys
+     * strip. Worth knowing but not worth refusing to answer over: without this,
+     * a site missing that file cannot connect at all.
+     */
+    private function cmsVersion(): ?string
+    {
+        try {
+            return Statamic::version();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** @return array<int, string> */
@@ -56,27 +74,5 @@ class HealthController
             'pushes' => (bool) config('altimiser.git.push'),
             'statamic_automation' => (bool) config('statamic.git.enabled', false),
         ];
-    }
-
-    /**
-     * The exact checks this receiver will act on. Altimiser sends nothing that
-     * is not on this list, so adding a transform here is the only change needed
-     * to start applying a new kind of fix.
-     *
-     * @return array<int, string>
-     */
-    private function checks(): array
-    {
-        $checks = [
-            ...config('altimiser.content_checks', []),
-            ...config('altimiser.asset_checks', []),
-            ...config('altimiser.file_checks', []),
-        ];
-
-        if (config('altimiser.patch_templates')) {
-            $checks = [...$checks, ...config('altimiser.template_checks', [])];
-        }
-
-        return array_values(array_unique($checks));
     }
 }

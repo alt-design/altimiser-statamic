@@ -201,3 +201,25 @@ it('keeps reporting ambiguity rather than falling back to an override', function
 
     expect($match->reason)->toBe('ambiguous');
 });
+
+it('writes structured data into the Alt SEO schema field', function () {
+    // The field runs Antlers before rendering, so one block written across a
+    // collection stays per-page once the variables resolve.
+    config()->set('altimiser.fields.structured_data', ['alt_seo_schema']);
+
+    $change = change(
+        'structured_data.missing',
+        null,
+        '{"@context":"https://schema.org","@type":"Person","name":"{{ title }}"}',
+    );
+
+    $match = $this->resolver->resolve(
+        $change,
+        ['alt_seo_meta_title' => 'Simon Moore', 'alt_seo_schema' => null],
+        ['alt_seo_meta_title', 'alt_seo_schema'],
+    );
+
+    // Nothing to match on, so it falls back to the first candidate the blueprint
+    // defines and leaves empty. Never overwrites markup somebody wrote.
+    expect($match->field)->toBe('alt_seo_schema');
+});

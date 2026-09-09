@@ -29,6 +29,10 @@ php artisan altimiser:connect https://example.com https://example.com/!/altimise
 
 For a value that was missing entirely there is nothing to match on, so it falls back to the first field in `altimiser.fields` that the blueprint defines and that is currently empty. It will never overwrite a field that already has content this way.
 
+**Structured data.** Alt SEO ships an `alt_seo_schema` field and runs Antlers over it before rendering, so a JSON-LD block written once across a collection stays per-page once the variables resolve. That makes schema a content change rather than a template edit, which is why it goes through the same applier as a meta description: it matches on the value the scan saw, refuses to overwrite anything already there, and Statamic's own git subscriber commits it. Invalid JSON logs to the console and renders nothing, so the failure mode for markup a model wrote is a page without markup rather than a page with broken markup.
+
+It needs `alt_seo_enable_schema` turned on, which is what swaps in the blueprint variant carrying the field. `GET /health` reports what this site's Alt SEO can do, and the check is withheld from the advertised list when it cannot do it. Offering a check with nowhere to write would mean Altimiser spending a model call per collection generating markup and then refusing every one of them at the last moment. It reports the reason too, so the answer to "why is there no structured data" is a line in the queue rather than an investigation.
+
 **Templates.** Two paths, tried in order.
 
 The **literal patcher** handles elements written out in the template as plain HTML: adding `loading="lazy"`, switching a lazy above-the-fold image to `eager`, appending `display=swap` to a Google Fonts URL. It fires only when the literal Altimiser reported appears in exactly one template, exactly once. It is exact, free and repeatable, so it always gets first refusal.

@@ -143,6 +143,7 @@ Rules you must follow:
      * site holds the value somewhere other than where we assume.
      */
     'content_checks' => [
+        'structured_data.missing',
         'title.missing',
         'title.too_short',
         'title.too_long',
@@ -196,5 +197,13 @@ Rules you must follow:
         'open_graph' => ['alt_seo_social_title', 'alt_seo_social_description', 'og_title', 'og_description', 'og_image'],
         'h1' => ['title'],
         'image' => ['alt', 'alt_text'],
+        /*
+         * Alt SEO stores JSON-LD per entry and runs Antlers over it before
+         * rendering, so one block written across a collection stays per-page
+         * once the variables resolve. Invalid JSON logs to the console and
+         * renders nothing, which is the failure mode you want for markup a
+         * model wrote.
+         */
+        'structured_data' => ['alt_seo_schema'],
     ],
 ];
