@@ -58,3 +58,19 @@ it('reports the version composer actually installed', function () {
     expect((new Altimiser)->version())
         ->toBe(InstalledVersions::getPrettyVersion('alt-design/altimiser-statamic'));
 });
+
+it('reports nothing about defaults when Alt SEO is absent', function () {
+    // The test harness has no Alt SEO, so this is also the real answer for any
+    // site running the receiver on its own.
+    expect((new AltSeo)->defaults())->toBe(['title' => null, 'description' => null]);
+});
+
+it('treats a blank default as no default', function () {
+    // Alt SEO falls back to the page title followed by the site name when the
+    // setting is empty, which is the arrangement we would ask for anyway. Only
+    // a value somebody typed can be wrong.
+    $altSeo = Mockery::mock(AltSeo::class)->makePartial();
+    $altSeo->shouldReceive('installed')->andReturn(true);
+
+    expect($altSeo->defaults()['title'])->toBeNull();
+});

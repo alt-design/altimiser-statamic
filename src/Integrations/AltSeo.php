@@ -2,6 +2,7 @@
 
 namespace AltDesign\Altimiser\Integrations;
 
+use AltDesign\AltSeo\Helpers\Data;
 use Composer\InstalledVersions;
 use Throwable;
 
@@ -45,6 +46,47 @@ class AltSeo
         return $this->installed() && (bool) config('alt-seo.alt_seo_enable_schema', false);
     }
 
+    /**
+     * The templates a page falls back to when it sets no title or description
+     * of its own.
+     *
+     * Worth reporting because they decide what most of the site says. A default
+     * of {title} alone leaves every result in Google unattributed, and one that
+     * builds a description out of the title and the site name produces a
+     * description that describes nothing, on every page that has not been given
+     * its own.
+     *
+     * @return array{title: ?string, description: ?string}
+     */
+    public function defaults(): array
+    {
+        if (! $this->installed()) {
+            return ['title' => null, 'description' => null];
+        }
+
+        try {
+            $settings = new Data('settings');
+
+            return [
+                'title' => $this->template($settings->get('alt_seo_meta_title_default')),
+                'description' => $this->template($settings->get('alt_seo_meta_description_default')),
+            ];
+        } catch (Throwable) {
+            // No settings file yet, or a shape we do not recognise. Alt SEO
+            // falls back to its own default in that case, which is the good one.
+            return ['title' => null, 'description' => null];
+        }
+    }
+
+    private function template(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        return trim($value) ?: null;
+    }
+
     /** @return array<string, mixed> */
     public function state(): array
     {
@@ -59,6 +101,7 @@ class AltSeo
              * from, which is worth knowing when one turns out to be missing.
              */
             'collection_blueprints' => (bool) config('alt-seo.alt_seo_support_collection_blueprints', false),
+            'defaults' => $this->defaults(),
         ];
     }
 }
