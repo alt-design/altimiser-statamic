@@ -232,3 +232,31 @@ it('puts the value back when nothing committed it and our own commit failed', fu
     expect($result['status'])->toBe('failed')
         ->and($entry->get('seo_description'))->toBe('About us.');
 });
+
+it('applies to an entry whose description is blocks rather than text', function () {
+    // A real Adams and Moore entry: description is a set field, and casting it
+    // to a string to substitute {description} was a fatal error that failed the
+    // whole apply request rather than the one change.
+    $entry = stubbedEntry([
+        'seo_description' => 'About us.',
+        'title' => 'About',
+        'description' => [
+            ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Blocks, not a line of text.']]],
+        ],
+    ]);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(descriptionChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('applied');
+});
+
+it('substitutes nothing for a title that is not text either', function () {
+    $entry = stubbedEntry([
+        'seo_description' => 'About us.',
+        'title' => ['nested' => 'somehow'],
+    ]);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(descriptionChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('applied');
+});

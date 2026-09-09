@@ -168,14 +168,20 @@ class ContentApplier implements Applier
     /**
      * Alt SEO substitutes these into stored values at render time.
      *
+     * Every one of these is a field handle a site is free to use for something
+     * else. Adams and Moore's description is a set of blocks rather than a line
+     * of text, and casting that to a string failed the change with an array
+     * conversion error that had nothing to do with the change, so anything that
+     * is not already a scalar substitutes as nothing.
+     *
      * @return array<string, string>
      */
     private function variables(object $entry): array
     {
         return [
-            'title' => (string) ($entry->get('title') ?? ''),
-            'site_name' => (string) (config('app.name') ?? ''),
-            'description' => (string) ($entry->get('description') ?? ''),
+            'title' => $this->asString($entry->get('title')) ?? '',
+            'site_name' => $this->asString(config('app.name')) ?? '',
+            'description' => $this->asString($entry->get('description')) ?? '',
         ];
     }
 
