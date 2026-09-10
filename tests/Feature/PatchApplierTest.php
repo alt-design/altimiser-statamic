@@ -105,3 +105,16 @@ it('leaves the file alone when it cannot be committed', function () {
         ->and(file_get_contents($repository.'/resources/views/page.antlers.html'))
         ->toBe("<h1>{{ title }}</h1>\n");
 });
+
+it('applies a patch whose trailing newline was trimmed in transit', function () {
+    $repository = repositoryWith("<h2>{{ title }}</h2>\n");
+
+    // What arrives after Laravel's TrimStrings has been over the request body.
+    $trimmed = rtrim(templatePatch());
+
+    $result = (new PatchApplier(patchGit()))->apply($trimmed, 'Heading levels');
+
+    expect($result['status'])->toBe('applied')
+        ->and(file_get_contents($repository.'/resources/views/page.antlers.html'))
+        ->toBe("<h1>{{ title }}</h1>\n");
+});

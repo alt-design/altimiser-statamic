@@ -31,6 +31,15 @@ class PatchApplier
             return $this->refused('empty', 'There was no patch to apply.');
         }
 
+        /*
+         * A patch has to end with a newline or git calls it corrupt, naming the
+         * last line as the fault. Laravel trims every string on the way in, so
+         * by the time a perfectly good patch reaches here its final newline has
+         * been eaten by middleware and the error points at the diff rather than
+         * at the transport that damaged it.
+         */
+        $patch = rtrim($patch, "\r\n")."\n";
+
         $files = $this->filesIn($patch);
 
         if ($files === []) {
