@@ -185,6 +185,29 @@ Rules you must follow:
     ],
 
     /*
+     * Structured data written once for a collection rather than once per entry.
+     *
+     * The markup is a template with Antlers in it, so every entry in a
+     * collection wants the same one, and an entry published next week wants it
+     * too. Statamic augments an empty field to its blueprint default, and Alt
+     * SEO reads the augmented value, so a default on the collection's own
+     * blueprint renders everywhere it is not overridden.
+     *
+     * Only collections whose blueprint already carries the alt_seo_schema field
+     * are written to. Adding the field here would take Alt SEO's injected tab
+     * away from that collection along with every other field on it, so a site
+     * opts in by putting the field in its own blueprint.
+     *
+     * except lists the collections whose entries genuinely differ from one
+     * another. Pages is the obvious one: a contact page and a service page
+     * share a template and nothing else.
+     */
+    'collection_defaults' => [
+        'enabled' => env('ALTIMISER_COLLECTION_DEFAULTS', true),
+        'except' => ['pages'],
+    ],
+
+    /*
      * Candidate fields for each check, tried in order when the current value is
      * empty and there is nothing to match against. When the current value is
      * present the receiver matches on the value itself and only falls back to

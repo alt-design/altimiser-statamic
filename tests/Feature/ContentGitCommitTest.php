@@ -1,6 +1,7 @@
 <?php
 
 use AltDesign\Altimiser\Applying\ChangeRequest;
+use AltDesign\Altimiser\Applying\CollectionSchema;
 use AltDesign\Altimiser\Applying\ContentApplier;
 use AltDesign\Altimiser\Applying\ContentResolver;
 use AltDesign\Altimiser\Applying\FieldResolver;
@@ -96,7 +97,13 @@ function contentApplierWith(GitRepository $git, object $entry): ContentApplier
     $content = Mockery::mock(ContentResolver::class);
     $content->shouldReceive('find')->andReturn($entry);
 
-    return new ContentApplier(new FieldResolver(new ValueResolver), new ValueResolver, $content, $git);
+    return new ContentApplier(
+        new FieldResolver(new ValueResolver),
+        new ValueResolver,
+        $content,
+        $git,
+        new CollectionSchema,
+    );
 }
 
 function descriptionChange(): ChangeRequest
@@ -259,4 +266,68 @@ it('substitutes nothing for a title that is not text either', function () {
     $result = contentApplierWith(contentGit(), $entry)->apply(descriptionChange(), dryRun: false)->toArray();
 
     expect($result['status'])->toBe('applied');
+});
+
+it('applies structured data to the collection and commits the blueprint', function () {
+    config()->set('altimiser.content_checks', ['structured_data.missing']);
+
+    $file = 'resources/blueprints/collections/news/news.yaml';
+    @mkdir(dirname(base_path($file)), 0777, true);
+    file_put_contents(base_path($file), implode("\n", [
+        'sections:',
+        '  alt_seo:',
+        '    fields:',
+        '      -',
+        '        handle: alt_seo_schema',
+        '        field:',
+        '          type: code',
+    ])."\n");
+
+    $entry = new class
+    {
+        public function data()
+        {
+            return collect([]);
+        }
+
+        public function collectionHandle(): string
+        {
+            return 'news';
+        }
+
+        public function id(): string
+        {
+            return 'entry-1';
+        }
+
+        public function blueprint(): object
+        {
+            return new class
+            {
+                public function path(): string
+                {
+                    return base_path('resources/blueprints/collections/news/news.yaml');
+                }
+            };
+        }
+    };
+
+    $change = new ChangeRequest(
+        id: 'abc',
+        check: 'structured_data.missing',
+        url: 'https://adamsmoorelaw.com/news/gross-negligence',
+        target: ['selector' => 'script[type="application/ld+json"]', 'attribute' => null],
+        currentValue: null,
+        suggestedValue: '{"@type":"NewsArticle","headline":"{{ title }}"}',
+    );
+
+    $result = contentApplierWith(contentGit(), $entry)->apply($change, dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('applied')
+        ->and($result['location']['type'])->toBe('collection')
+        ->and($result['location']['collection'])->toBe('news')
+        ->and($result['location']['file'])->toBe($file)
+        ->and(file_get_contents(base_path($file)))->toContain('NewsArticle');
+
+    @unlink(base_path($file));
 });

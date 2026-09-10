@@ -13,6 +13,7 @@ class ContentApplier implements Applier
         private ValueResolver $values,
         private ContentResolver $content,
         private GitRepository $git,
+        private CollectionSchema $collections,
     ) {}
 
     public function supports(string $check): bool
@@ -38,6 +39,12 @@ class ContentApplier implements Applier
                 'not_found',
                 "Nothing editable answers to {$change->path()}. It may be a global, a form page, or a hard-coded route.",
             );
+        }
+
+        $blueprint = $this->collections->file($change, $entry);
+
+        if ($blueprint !== null) {
+            return $this->applyToCollection($change, $entry, $blueprint, $dryRun);
         }
 
         $data = $entry->data()->all();
@@ -103,6 +110,68 @@ class ContentApplier implements Applier
             $this->asString($current),
             $change->suggestedValue,
         );
+    }
+
+    /**
+     * Writes the block once, as the collection's default, so every entry in it
+     * falls back to the same markup and the next one published inherits it.
+     */
+    private function applyToCollection(ChangeRequest $change, object $entry, string $file, bool $dryRun): ChangeResult
+    {
+        $current = $this->collections->current($file);
+        $location = [
+            'type' => 'collection',
+            'collection' => $entry->collectionHandle(),
+            'field' => 'alt_seo_schema',
+            'file' => $file,
+        ];
+
+        if ($current === $change->suggestedValue) {
+            return ChangeResult::alreadyApplied($change->id, $location, 'This collection already defaults to this markup.');
+        }
+
+        /*
+         * A default somebody already chose is left alone. It may be better than
+         * ours, it is certainly deliberate, and quietly replacing the markup for
+         * a whole collection is not a thing to do without being asked.
+         */
+        if (filled($current)) {
+            return ChangeResult::skipped(
+                $change->id,
+                'default_present',
+                "The {$entry->collectionHandle()} collection already has default schema markup, which was left in place.",
+            );
+        }
+
+        if ($dryRun) {
+            return ChangeResult::applied($change->id, $location, $current, $change->suggestedValue);
+        }
+
+        $blocked = $this->gitBlocker($file);
+
+        if ($blocked !== null) {
+            return $blocked->withId($change->id);
+        }
+
+        $headBefore = $this->headBefore($file);
+
+        try {
+            $this->collections->write($file, $change->suggestedValue);
+        } catch (Throwable $exception) {
+            return ChangeResult::failed($change->id, 'write_failed', $exception->getMessage());
+        }
+
+        $committed = $this->commitSaved($file, $headBefore, $change);
+
+        if ($committed === null) {
+            return ChangeResult::failed(
+                $change->id,
+                'write_failed',
+                "The edit to {$file} could not be committed. It is still on disk and needs committing by hand.",
+            );
+        }
+
+        return ChangeResult::applied($change->id, [...$location, ...$committed], $current, $change->suggestedValue);
     }
 
     /**
