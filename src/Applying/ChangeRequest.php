@@ -11,6 +11,15 @@ class ChangeRequest
         public array $target,
         public ?string $currentValue,
         public ?string $suggestedValue,
+        /**
+         * Whether the value describes this page rather than every page.
+         *
+         * A lazy loading attribute is the same string on every image on the
+         * internet. A heading is this page's own words. The difference decides
+         * whether a template may contain the value literally, and only the
+         * service that raised the finding knows which it is.
+         */
+        public bool $pageSpecific = false,
     ) {}
 
     public static function fromArray(array $data): self
@@ -22,7 +31,20 @@ class ChangeRequest
             target: $data['target'] ?? [],
             currentValue: $data['current_value'] ?? null,
             suggestedValue: $data['suggested_value'] ?? null,
+            pageSpecific: (bool) ($data['page_specific'] ?? false),
         );
+    }
+
+    /**
+     * Whether the finding is that an element is absent.
+     *
+     * Worth knowing because everything else here is "this element exists and
+     * wants an attribute", and telling a model an element exists when the whole
+     * finding is that it does not gets it inventing one to satisfy the brief.
+     */
+    public function reportsAMissingElement(): bool
+    {
+        return str_ends_with($this->check, '.missing');
     }
 
     /** The literal string a template patcher can search source files for. */

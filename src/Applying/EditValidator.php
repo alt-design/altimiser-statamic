@@ -16,8 +16,12 @@ class EditValidator
      * @param  array<string, mixed>  $response
      * @param  array<string, string>  $candidates  path to contents of the files we offered
      */
-    public function validate(array $response, array $candidates, ?string $renderedTag = null): TemplateEdit
-    {
+    public function validate(
+        array $response,
+        array $candidates,
+        ?string $renderedTag = null,
+        ?ChangeRequest $change = null,
+    ): TemplateEdit {
         if (($response['applicable'] ?? false) !== true) {
             return TemplateEdit::rejected($response['reasoning'] ?? 'The model declined to make this change.');
         }
@@ -57,6 +61,14 @@ class EditValidator
             return TemplateEdit::rejected('The edit removes substantially more than it adds, which is not what a fix looks like.');
         }
 
+        if ($this->hardcodesPageValue($change, $replaced, $replacement)) {
+            return TemplateEdit::rejected(
+                "The edit writes \"{$change->suggestedValue}\" into the template as a literal. That value "
+                .'belongs to one page and a template renders many, so it would be wrong on every other page '
+                .'this file builds.',
+            );
+        }
+
         // The last and most useful guard: the tag it chose must be capable of
         // having produced the element that was actually reported.
         if ($this->consistency->contradicts($replaced, $renderedTag)) {
@@ -74,6 +86,36 @@ class EditValidator
             $replacement,
             $response['reasoning'] ?? null,
         );
+    }
+
+    /**
+     * An edit that introduces this page's own words into a shared file.
+     *
+     * This is what a model does when it is asked for a value it cannot reach
+     * through a variable: it finds somewhere to put the string. On Adams and
+     * Moore that produced aria-label="Team" on a hero partial that several other
+     * pages render, and the next page's fix overwrote it. Neither the attribute
+     * nor the literal was ever the fix.
+     */
+    private function hardcodesPageValue(?ChangeRequest $change, string $replaced, string $replacement): bool
+    {
+        if ($change === null) {
+            return false;
+        }
+
+        if (! $change->pageSpecific) {
+            return false;
+        }
+
+        if (blank($change->suggestedValue)) {
+            return false;
+        }
+
+        if (str_contains($replaced, $change->suggestedValue)) {
+            return false;
+        }
+
+        return str_contains($replacement, $change->suggestedValue);
     }
 
     /**

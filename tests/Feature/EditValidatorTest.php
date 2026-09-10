@@ -1,5 +1,6 @@
 <?php
 
+use AltDesign\Altimiser\Applying\ChangeRequest;
 use AltDesign\Altimiser\Applying\EditValidator;
 
 beforeEach(function () {
@@ -226,6 +227,101 @@ it('allows the rendered element to carry extra classes added elsewhere', functio
         $candidates,
         renderedTag: '<img src="/a.webp" class="hero rounded shadow-lg">',
     );
+
+    expect($edit->usable())->toBeTrue();
+});
+
+function headingChange(): ChangeRequest
+{
+    return new ChangeRequest(
+        id: 'abc',
+        check: 'h1.missing',
+        url: 'https://adamsmoorelaw.com/team',
+        target: ['selector' => 'h1', 'attribute' => null],
+        currentValue: null,
+        suggestedValue: 'Team',
+        pageSpecific: true,
+    );
+}
+
+it('refuses to write one page\'s heading into a shared template', function () {
+    // The real edit: an aria-label carrying one page's title, added to a hero
+    // partial several other pages render. The next page's fix overwrote it.
+    $candidates = [
+        'resources/views/sets/hero.antlers.html' => implode("\n", [
+            '<section class="hero">',
+            '    <h1 class="hero-title" data-aos="fade-right">{{ title }}</h1>',
+            '</section>',
+        ]),
+    ];
+
+    $edit = $this->validator->validate([
+        'applicable' => true,
+        'file' => 'resources/views/sets/hero.antlers.html',
+        'start_line' => 2,
+        'end_line' => 2,
+        'new_text' => '    <h1 class="hero-title" data-aos="fade-right" aria-label="Team">{{ title }}</h1>',
+        'reasoning' => 'Added an accessible attribute carrying the requested value.',
+    ], $candidates, null, headingChange());
+
+    expect($edit->usable())->toBeFalse()
+        ->and($edit->rejection)->toContain('belongs to one page');
+});
+
+it('still allows a heading to be promoted, which is the real fix', function () {
+    $candidates = [
+        'resources/views/sets/intro.antlers.html' => implode("\n", [
+            '<section>',
+            '    <h2 class="section-title">{{ title }}</h2>',
+            '</section>',
+        ]),
+    ];
+
+    $edit = $this->validator->validate([
+        'applicable' => true,
+        'file' => 'resources/views/sets/intro.antlers.html',
+        'start_line' => 2,
+        'end_line' => 2,
+        'new_text' => '    <h1 class="section-title">{{ title }}</h1>',
+        'reasoning' => 'This is the page heading, rendered one level too low.',
+    ], $candidates, null, headingChange());
+
+    expect($edit->usable())->toBeTrue();
+});
+
+it('leaves constants such as lazy loading alone', function () {
+    // "lazy" is the same string on every image on the internet, so a template
+    // containing it literally is correct rather than a leak.
+    $change = new ChangeRequest(
+        id: 'abc',
+        check: 'image.not_lazy_loaded',
+        url: 'https://adamsmoorelaw.com/team',
+        target: ['selector' => 'img', 'attribute' => 'loading'],
+        currentValue: null,
+        suggestedValue: 'lazy',
+        pageSpecific: false,
+    );
+
+    expect($this->validator->validate(modelSaid(), $this->candidates, null, $change)->usable())->toBeTrue();
+});
+
+it('allows a page value that was already in the template before the edit', function () {
+    $candidates = [
+        'resources/views/page.antlers.html' => implode("\n", [
+            '<article>',
+            '    <h2 class="title">Team</h2>',
+            '</article>',
+        ]),
+    ];
+
+    $edit = $this->validator->validate([
+        'applicable' => true,
+        'file' => 'resources/views/page.antlers.html',
+        'start_line' => 2,
+        'end_line' => 2,
+        'new_text' => '    <h1 class="title">Team</h1>',
+        'reasoning' => 'Promoted the existing heading.',
+    ], $candidates, null, headingChange());
 
     expect($edit->usable())->toBeTrue();
 });

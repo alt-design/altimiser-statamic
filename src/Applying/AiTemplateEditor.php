@@ -67,7 +67,7 @@ class AiTemplateEditor
                 $edits[$key] = $this->interpret(
                     $responses[$key] ?? null,
                     $request['candidates'],
-                    $request['change']->target['context'] ?? null,
+                    $request['change'],
                 );
             }
         }
@@ -92,8 +92,10 @@ class AiTemplateEditor
     }
 
     /** @param array<string, string> $candidates */
-    private function interpret(mixed $response, array $candidates, ?string $renderedTag): TemplateEdit
+    private function interpret(mixed $response, array $candidates, ChangeRequest $change): TemplateEdit
     {
+        $renderedTag = $change->target['context'] ?? null;
+
         if (! $response instanceof Response) {
             return TemplateEdit::rejected('The model could not be reached.');
         }
@@ -119,6 +121,7 @@ class AiTemplateEditor
                 is_string($content) ? json_decode($content, true, flags: JSON_THROW_ON_ERROR) : [],
                 $candidates,
                 $renderedTag,
+                $change,
             );
         } catch (Throwable $exception) {
             return TemplateEdit::rejected("The model's reply could not be read: {$exception->getMessage()}");
@@ -195,13 +198,48 @@ class AiTemplateEditor
             'Rendered value that identified the element: '.($change->matchLiteral() ?? 'not available'),
             $this->renderedContext($change),
             '',
+            ...$this->brief($change),
+        ]));
+    }
+
+    /**
+     * What a correct edit looks like for this kind of finding.
+     *
+     * There are two kinds and they were being briefed identically. Telling a
+     * model that the page contained the element, when the finding is that it
+     * did not, leaves it no honest way to comply, and what it does instead is
+     * find the nearest element that looks related and put the value on it as an
+     * attribute nobody asked for.
+     *
+     * @return array<int, string>
+     */
+    private function brief(ChangeRequest $change): array
+    {
+        if ($change->reportsAMissingElement()) {
+            return [
+                'No element matching that selector exists on the rendered page. That',
+                'absence is the finding. Do not add an attribute to another element to',
+                'carry the value, and do not add an attribute that was not named above:',
+                'an attribute nobody asked for is not this fix.',
+                'The only edit that fixes this is one of two things. If one of these',
+                'templates renders this page\'s main heading at the wrong level, change',
+                'that tag name and nothing else. If the element is genuinely absent and',
+                'no existing tag is the one that should have been it, decline: a page',
+                'that needs a heading written needs a person, not an attribute.',
+                'Return the line range holding the tag and the replacement for it.',
+            ];
+        }
+
+        return [
             'The rendered page contained an element matching that selector. The',
             'element is produced by one of the templates above, most likely from a',
             'variable rather than a literal. Match it on its class list and other',
-            'attributes rather than on its URL, which is generated. If no tag in',
-            'these templates could have produced that exact element, decline.',
+            'attributes rather than on its URL, which is generated. Set the named',
+            'attribute and change nothing else: never add a second attribute to',
+            'carry a value the named one could hold. If no tag in these templates',
+            'could have produced that exact element, decline.',
             'Return the line range holding the tag and the replacement for it.',
-        ]));
+        ];
     }
 
     /**
@@ -228,6 +266,13 @@ class AiTemplateEditor
      */
     private function valueInstruction(ChangeRequest $change): string
     {
+        if (filled($change->suggestedValue) && $change->pageSpecific) {
+            return "Value expected: {$change->suggestedValue}\n"
+                .'That value belongs to this one page and these templates render many, so it '
+                .'must never appear in the file as a literal. It can only come from a variable '
+                .'already in scope, and if none holds it, that is a reason to decline.';
+        }
+
         if (filled($change->suggestedValue)) {
             return "Value to set: {$change->suggestedValue}";
         }

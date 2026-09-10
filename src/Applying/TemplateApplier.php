@@ -304,8 +304,21 @@ class TemplateApplier implements Applier, PreparesBatch
     }
 
     /** The element type we are hunting, used to narrow a directory read. */
+    /**
+     * Narrows a directory of partials to the ones that could hold the element.
+     *
+     * Not used where the finding is that the element is absent, and the reason
+     * is worth spelling out: filtering on <h1 for a missing h1 offers only the
+     * files that already have one, which is exactly the set that cannot be the
+     * answer. It is how a fix for a page with no heading came to edit a hero
+     * partial belonging to other pages.
+     */
     private function tagHint(ChangeRequest $change): ?string
     {
+        if ($change->reportsAMissingElement()) {
+            return null;
+        }
+
         $selector = $change->target['selector'] ?? '';
 
         return preg_match('/^([a-z]+)/i', $selector, $matches) === 1 ? "<{$matches[1]}" : null;

@@ -83,15 +83,58 @@ class TemplateLocator
             }
         }
 
+        $used = $this->setsUsedBy($entry);
+
         foreach ($files as $contents) {
             foreach ($this->partialsIn($contents) as $partial) {
-                foreach ($this->filesFor($partial, $hint) as $resolved => $body) {
+                foreach ($this->filesFor($partial, $hint, $used) as $resolved => $body) {
                     $files[$resolved] ??= $body;
                 }
             }
         }
 
         return $this->withinBudget($files);
+    }
+
+    /**
+     * The sets this entry actually renders.
+     *
+     * A page builder writes its partial name from a variable, so the directory
+     * read below cannot tell which of forty sets are on this page. The entry
+     * can: every item in a page builder field carries the handle of the set it
+     * is. Without this, a fix for one page is offered partials belonging to
+     * other pages entirely, and the model edits a shared file that had nothing
+     * to do with the page it was asked about.
+     *
+     * Bard writes its nodes with a type as well, so this collects names like
+     * "paragraph" too. Harmless: they are only ever used to resolve a filename
+     * inside the partial's own directory, and there is no sets/paragraph.
+     *
+     * @return array<int, string>
+     */
+    private function setsUsedBy(Entry $entry): array
+    {
+        $types = [];
+
+        $this->typesIn($entry->data()->all(), $types);
+
+        return array_values(array_unique($types));
+    }
+
+    /** @param array<int, string> $types */
+    private function typesIn(mixed $value, array &$types): void
+    {
+        if (! is_array($value)) {
+            return;
+        }
+
+        if (is_string($value['type'] ?? null)) {
+            $types[] = $value['type'];
+        }
+
+        foreach ($value as $item) {
+            $this->typesIn($item, $types);
+        }
     }
 
     /**
@@ -102,9 +145,10 @@ class TemplateLocator
      * narrowed to files that mention the kind of tag we are looking for so the
      * context budget is not spent on partials that cannot contain it.
      *
+     * @param  array<int, string>  $used  set handles this entry actually renders
      * @return array<string, string>
      */
-    private function filesFor(string $partial, ?string $hint): array
+    private function filesFor(string $partial, ?string $hint, array $used = []): array
     {
         if (! str_contains($partial, '{')) {
             $resolved = $this->resolve($partial) ?? $this->resolve("partials/{$partial}");
@@ -118,7 +162,28 @@ class TemplateLocator
             return [];
         }
 
-        return $this->readDirectory($directory, $hint);
+        $named = $this->namedIn($directory, $used);
+
+        return $named !== [] ? $named : $this->readDirectory($directory, $hint);
+    }
+
+    /**
+     * @param  array<int, string>  $names
+     * @return array<string, string>
+     */
+    private function namedIn(string $directory, array $names): array
+    {
+        $files = [];
+
+        foreach ($names as $name) {
+            $resolved = $this->resolve("{$directory}/{$name}");
+
+            if ($resolved !== null) {
+                $files[$resolved] = file_get_contents($this->absolute($resolved));
+            }
+        }
+
+        return $files;
     }
 
     /** @return array<string, string> */
