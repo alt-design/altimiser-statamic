@@ -41,10 +41,18 @@ class GitRepository
     /**
      * Identity is passed per-command because the web user on a deployed site
      * usually has no ~/.gitconfig, which would otherwise make the commit fail.
+     *
+     * Takes several paths as readily as one, because a patch touches a handful
+     * of templates and they belong in a single commit: one thing was decided,
+     * so one thing should be revertable.
+     *
+     * @param  string|array<int, string>  $relativePath
      */
-    public function commit(string $relativePath, string $message): ?string
+    public function commit(string|array $relativePath, string $message): ?string
     {
-        if (! $this->run(['add', '--', $relativePath])->successful()) {
+        $paths = array_values((array) $relativePath);
+
+        if (! $this->run(['add', '--', ...$paths])->successful()) {
             return null;
         }
 
@@ -55,7 +63,7 @@ class GitRepository
             '-c', "user.email={$email}",
             'commit',
             '--message', $message,
-            '--only', '--', $relativePath,
+            '--only', '--', ...$paths,
         ]);
 
         if (! $committed->successful()) {

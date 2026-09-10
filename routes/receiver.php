@@ -2,6 +2,7 @@
 
 use AltDesign\Altimiser\Http\Controllers\ChangesController;
 use AltDesign\Altimiser\Http\Controllers\HealthController;
+use AltDesign\Altimiser\Http\Controllers\PatchController;
 use AltDesign\Altimiser\Http\Middleware\VerifySignature;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
@@ -26,4 +27,5 @@ Route::prefix(config('altimiser.route_prefix'))
     ->group(function () {
         Route::get('health', HealthController::class)->name('altimiser.health');
         Route::post('changes', ChangesController::class)->name('altimiser.changes');
+        Route::post('patch', PatchController::class)->name('altimiser.patch');
     });
