@@ -46,7 +46,23 @@ it('matches even when the stored value has different whitespace', function () {
     expect($match->field)->toBe('seo_description');
 });
 
-it('refuses to guess when two fields hold the same value', function () {
+it('refuses to guess when two fields this check may write to hold the same value', function () {
+    $match = $this->resolver->resolve(
+        change('meta_description.too_short', 'Same text.'),
+        ['seo_description' => 'Same text.', 'meta_description' => 'Same text.'],
+        ['seo_description', 'meta_description'],
+    );
+
+    expect($match->matched())->toBeFalse()
+        ->and($match->reason)->toBe('ambiguous')
+        ->and($match->message)->toContain('seo_description')
+        ->and($match->message)->toContain('meta_description');
+});
+
+it('will not write to a field this check was never given, however well it matches', function () {
+    // summary and intro hold the value, and neither is a meta description
+    // field. Writing to one because it happens to match is how an SEO rewrite
+    // lands in a field the site renders somewhere else entirely.
     $match = $this->resolver->resolve(
         change('meta_description.too_short', 'Same text.'),
         ['summary' => 'Same text.', 'intro' => 'Same text.'],
@@ -54,9 +70,7 @@ it('refuses to guess when two fields hold the same value', function () {
     );
 
     expect($match->matched())->toBeFalse()
-        ->and($match->reason)->toBe('ambiguous')
-        ->and($match->message)->toContain('summary')
-        ->and($match->message)->toContain('intro');
+        ->and($match->message)->toContain('alt_seo_meta_description');
 });
 
 it('breaks a tie using the configured field order', function () {
@@ -190,7 +204,7 @@ it('will not override an inherited value into a field that already has content',
         ->and($match->reason)->toBe('no_match');
 });
 
-it('keeps reporting ambiguity rather than falling back to an override', function () {
+it('overrides per page when the value came from fields it may not write to', function () {
     config()->set('altimiser.fields.meta_description', ['alt_seo_meta_description']);
 
     $match = $this->resolver->resolve(
@@ -199,7 +213,39 @@ it('keeps reporting ambiguity rather than falling back to an override', function
         ['summary', 'intro', 'alt_seo_meta_description'],
     );
 
-    expect($match->reason)->toBe('ambiguous');
+    // Which of summary and intro produced it does not matter, because neither
+    // was ever going to be written to. The empty SEO field is the answer.
+    expect($match->matched())->toBeTrue()
+        ->and($match->field)->toBe('alt_seo_meta_description');
+});
+
+it('never writes a meta title into the entry title', function () {
+    config()->set('altimiser.fields.title', ['alt_seo_meta_title', 'seo_title', 'meta_title']);
+
+    // The shape every Statamic site with Alt SEO's default {title} template
+    // has: the rendered <title> is the entry's own title, verbatim.
+    $match = $this->resolver->resolve(
+        change('title.too_short', 'Insights'),
+        ['title' => 'Insights', 'alt_seo_meta_title' => ''],
+        ['title', 'alt_seo_meta_title'],
+    );
+
+    // Rewriting the title field would rename the page in the menu, in every
+    // listing, in the breadcrumbs and in the control panel.
+    expect($match->field)->toBe('alt_seo_meta_title')
+        ->and($match->field)->not->toBe('title');
+});
+
+it('still writes an H1 to the entry title, which is what an H1 is', function () {
+    config()->set('altimiser.fields.h1', ['title']);
+
+    $match = $this->resolver->resolve(
+        change('h1.missing', null),
+        ['title' => ''],
+        ['title'],
+    );
+
+    expect($match->field)->toBe('title');
 });
 
 it('writes structured data into the Alt SEO schema field', function () {

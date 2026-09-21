@@ -79,15 +79,22 @@ class FieldResolver
         // A field storing the value verbatim beats one that only matches after
         // substitution, because writing to it discards nothing.
         foreach ([[$literal, false], [$templated, true]] as [$matches, $flattens]) {
-            if ($matches === []) {
+            /*
+             * Only a field this check was told it may write to.
+             *
+             * Alt SEO's title default is often {title}, so the meta title a
+             * scan reads back is the entry's own title, verbatim. Matching on
+             * value alone then picks the title field, and an SEO rewrite of a
+             * meta title renames the page in the menu, every listing, the
+             * breadcrumbs and the control panel. A value found outside the
+             * candidates means it was produced somewhere that is not ours to
+             * edit, which calls for a per-page override rather than an edit.
+             */
+            $preferred = array_values(array_intersect($candidates, $matches));
+
+            if ($preferred === []) {
                 continue;
             }
-
-            if (count($matches) === 1) {
-                return $flattens ? FieldMatch::flattening($matches[0]) : FieldMatch::found($matches[0]);
-            }
-
-            $preferred = array_values(array_intersect($candidates, $matches));
 
             if (count($preferred) === 1) {
                 return $flattens ? FieldMatch::flattening($preferred[0]) : FieldMatch::found($preferred[0]);
@@ -95,7 +102,7 @@ class FieldResolver
 
             return FieldMatch::failed(
                 'ambiguous',
-                'More than one field holds this value ('.implode(', ', $matches).'), so applying would be a guess.',
+                'More than one field holds this value ('.implode(', ', $preferred).'), so applying would be a guess.',
             );
         }
 

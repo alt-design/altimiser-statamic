@@ -214,7 +214,15 @@ Rules you must follow:
      * this list to break a tie.
      */
     'fields' => [
-        'title' => ['alt_seo_meta_title', 'seo_title', 'meta_title', 'title'],
+        /*
+         * Never the entry's own title. A meta title and a page's name are two
+         * different things: the first is written for a search result, the
+         * second is what the menu, the breadcrumbs, every listing and the
+         * control panel call this page. Alt SEO's title default is commonly
+         * {title}, which makes them identical on the rendered page and makes
+         * matching on value alone offer to rename the site.
+         */
+        'title' => ['alt_seo_meta_title', 'seo_title', 'meta_title'],
         'meta_description' => ['alt_seo_meta_description', 'seo_description', 'meta_description', 'description', 'summary'],
         'canonical' => ['alt_seo_canonical_url', 'canonical_url', 'canonical'],
         'open_graph' => ['alt_seo_social_title', 'alt_seo_social_description', 'og_title', 'og_description', 'og_image'],
