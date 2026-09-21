@@ -15,7 +15,6 @@ beforeEach(function () {
     config()->set('altimiser.patch_templates', true);
     config()->set('altimiser.template_paths', [$this->relative]);
     config()->set('altimiser.template_checks', ['image.not_lazy_loaded', 'image.dimensions_missing']);
-    config()->set('altimiser.ai.enabled', false);
     config()->set('altimiser.git.enabled', false);
 });
 

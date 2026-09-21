@@ -27,66 +27,48 @@ php artisan altimiser:connect https://example.com https://example.com/!/altimise
 
 **Content.** Entry fields, resolved by matching the value Altimiser saw in the rendered page against the entry's field values. No per-site configuration is needed when the value appears in exactly one field, which is the usual case. When two fields hold the same string, `altimiser.fields` breaks the tie; when the tie cannot be broken the change is reported as `ambiguous` rather than guessed at.
 
+**Only ever a field the check was given.** `altimiser.fields` is not a preference order, it is the whole set of fields a check may write to. A value matched in any other field means the page rendered it from somewhere that is not ours to edit, and the answer is a per-page override in the first empty field the check does own.
+
+That rule exists because of the meta title. Alt SEO's title default is commonly `{title}`, so the `<title>` a scan reads back is the entry's own title, character for character. Matching on value alone picks the `title` field, and a meta title rewritten for a search result is not the name of the page: writing it there renames the page in the menu, in every listing, in the breadcrumbs and in the control panel. So `fields.title` lists the SEO fields and never `title`, and a meta title with nowhere of its own to go is written as `alt_seo_meta_title` on that entry instead. `fields.h1` still points at `title`, because an H1 genuinely is the page's name.
+
 For a value that was missing entirely there is nothing to match on, so it falls back to the first field in `altimiser.fields` that the blueprint defines and that is currently empty. It will never overwrite a field that already has content this way.
 
 **Structured data.** Alt SEO ships an `alt_seo_schema` field and runs Antlers over it before rendering, so a JSON-LD block written once across a collection stays per-page once the variables resolve. That makes schema a content change rather than a template edit, which is why it goes through the same applier as a meta description: it matches on the value the scan saw, refuses to overwrite anything already there, and Statamic's own git subscriber commits it. Invalid JSON logs to the console and renders nothing, so the failure mode for markup a model wrote is a page without markup rather than a page with broken markup. Where a collection's own blueprint carries the `alt_seo_schema` field, the block is written once as that field's default rather than into every entry, so entries published later inherit it and an entry with its own value keeps it. `pages` is excluded by default, because entries there share a template and nothing else. A collection that already has a default is left alone.
 
 It needs `alt_seo_enable_schema` turned on, which is what swaps in the blueprint variant carrying the field. `GET /health` reports what this site's Alt SEO can do, and the check is withheld from the advertised list when it cannot do it. Offering a check with nowhere to write would mean Altimiser spending a model call per collection generating markup and then refusing every one of them at the last moment. It reports the reason too, so the answer to "why is there no structured data" is a line in the queue rather than an investigation.
 
-**Templates.** Two paths, tried in order.
+**Templates.** Two routes, and which one a finding takes depends on whether the element is written out or built from variables.
 
-The **literal patcher** handles elements written out in the template as plain HTML: adding `loading="lazy"`, switching a lazy above-the-fold image to `eager`, appending `display=swap` to a Google Fonts URL. It fires only when the literal Altimiser reported appears in exactly one template, exactly once. It is exact, free and repeatable, so it always gets first refusal.
+The **literal patcher**, here in the receiver, handles elements written out in the template as plain HTML: adding `loading="lazy"`, switching a lazy above-the-fold image to `eager`, appending `display=swap` to a Google Fonts URL. It fires only when the literal Altimiser reported appears in exactly one template, exactly once. It is exact, free and repeatable, so it always gets first refusal.
 
-On a real content-driven site it rarely fires. An image rendered as `<img src="{{ hero:url }}">` contains no literal to search for, and that is the common case rather than the exception.
+On a real content-driven site it rarely fires. An image rendered as `<img src="{{ hero:url }}">` contains no literal to search for, and that is the common case rather than the exception. Anything it cannot place is reported as `no_match` with the reason, and belongs to the agent instead (see below).
 
-The **AI editor** picks up from there. See below.
+Two templates writing out the same element is reported as `ambiguous` with both files named, rather than one of them being picked. That is usually a partial somebody copied instead of including.
 
 Set `ALTIMISER_PATCH_TEMPLATES=false` to drop template handling entirely and never touch a file.
 
-## AI template editing
+`h1.missing` is deliberately not on the template list. A page with no heading needs one written, which means deciding what it says, and the only place that decision can be made safely is with the whole repository open. Offering it here is how a page title once got written into a partial shared with four other pages.
 
-Off by default. Turn it on with:
+## Patches from the agent
+
+The receiver used to ask a model to make the edits the literal patcher could not, one finding at a time, with a dozen files of context. It was the wrong shape for the job. A model given six files and one finding cannot tell that the partial it is editing renders on four other pages, and it has no way to know that the two hundred and thirty eight images with no dimensions are really fifteen images.
+
+That work now happens in Altimiser, in a GitHub Actions run against the client's own repository, where an agent has the whole checkout to read. What comes back is a unified diff, reviewed by a person in Altimiser, and sent here as one request.
 
 ```
-ALTIMISER_AI=true
-OPENAI_API_KEY=sk-...
-ALTIMISER_AI_MODEL=gpt-5-mini
+POST /!/altimiser/patch
 ```
 
-The model's job is the part no string matcher can do: reading Antlers or Blade and working out which tag produces an element that was built from variables. It is not trusted with anything else.
+The body is the patch and a commit message, signed with the same shared secret as everything else. The receiver:
 
-**It never rewrites a file.** The templates it is shown are line-numbered, and it answers with a line range and the replacement for exactly those lines. The receiver applies it only if every one of these holds:
+- refuses anything touching a file outside `template_paths`
+- refuses a working tree with uncommitted changes in the files the patch touches
+- runs `git apply --check` first, so a patch that will not apply cleanly changes nothing
+- applies it and makes one commit, returning the SHA
 
-- the file it names is one the receiver chose to send it
-- the line range exists in that file
-- the range is at most 12 lines, because a fix that needs more than that is not the kind of fix this does
-- it is not the whole file
-- the replacement differs from what is there, and is not dramatically shorter (these fixes add attributes; an edit that mostly deletes is not a fix)
-- where the scan reported the rendered element, the replacement still produces something consistent with it
+Nothing partial is ever left behind. The patch applies whole or not at all, and the revert is a `git revert` of one commit, the same as every other change this addon makes.
 
-An edit failing any rule is discarded and reported as `no_match` with the reason. The model can also decline, and a declared "I cannot find this" is treated as a valid answer rather than something to retry harder.
-
-Context is chosen rather than searched, and it is narrowed twice. Every literal the rendered element offers, its class list, id and alt text as well as its src, is searched for first: where one of them lands in a handful of files, those are the files the model gets. Only when nothing narrows it does the receiver fall back to what Statamic already knows, which is the entry's template, its layout and the partials those reference one level deep. Either way it is capped at `ai.max_files` and `ai.max_bytes`, 12 files and 60KB by default.
-
-That narrowing is worth more than it sounds. Of 131 distinct image elements on one real site, 4 were findable by their src and 82 by their class, because a Glide URL appears nowhere in the source and a class list appears verbatim.
-
-Use `--dry-run` from the Altimiser end to see the exact edit the model proposed, per page, before anything is written.
-
-### What a batch costs
-
-Three things keep the bill down, and they matter more than the choice of model.
-
-**One question per distinct question.** An image inside a loop is rendered on forty pages and arrives as forty changes, every one asking the same thing of the same templates. They are fingerprinted on everything the prompt is built from, asked once, and the answer is shared. On a real queue that was 781 changes over 218 actual questions, so roughly a quarter of the calls. Fingerprinting includes the value and the candidate file list, because dimensions differ per asset and the same element on two URLs can come from different templates.
-
-**Templates first, question last.** OpenAI caches identical prompt prefixes and charges a fraction for a hit, but only for a prefix. A per-change line at the top of the prompt would make every call a fresh read of fifteen thousand tokens of markup, so the files go in front and the change-specific part goes after them. Every change against the same templates then rides the same cached prefix.
-
-**As little thinking as the job needs.** `ai.reasoning_effort` defaults to `low`, because finding a tag and returning a line range does not reward deliberation. Set it to null for a model that predates the parameter, and it is left out of the request entirely.
-
-Rate limits are retried three times, since at ten concurrent calls a 429 is routine rather than exceptional, and without that it would be recorded as a change that could not be made. A refusal and a reply cut short by the token limit are each reported as what they are.
-
-`ai.timeout` is deliberately below `time_budget`, and the budget's clock starts before the model calls rather than after them. Resolving is by far the slowest part of a request, so a budget that only covered writing let a slow resolve run the whole request past whatever the web server allowed. That is what produces a page of changes that simply never answered.
-
-**Worth knowing:** this sends template source to OpenAI from the client's own server, using the key configured on that site. Nothing goes via Altimiser's infrastructure, but it is still a third-party data transfer, and clients with strict data rules should be asked. Prompt and model live in the published config, so they can be tuned per site without a new release, but a genuine behaviour improvement still means updating the addon everywhere.
+The receiver holds no model key and makes no model calls of its own for template work. That removes a third-party data transfer from the client's server: template source no longer leaves the site.
 
 ## Alt SEO
 
@@ -96,7 +78,7 @@ Rate limits are retried three times, since at ten concurrent calls a 429 is rout
 
 Writing to the shared default would let one approval rewrite hundreds of pages that Altimiser has never looked at. Instead the receiver writes a per-page override into the entry's own empty field, exactly as an editor would in the CP. The blast radius is one page, and the result is flagged `inherited`.
 
-Because the entry field is legitimately empty in this case, the value-changed guard is relaxed for it — but only to write into a field that is empty, so nothing can be overwritten.
+Because the entry field is legitimately empty in this case, the value-changed guard is relaxed for it, but only to write into a field that is empty, so nothing can be overwritten.
 
 **Substituted variables.** Alt SEO expands `{title}`, `{site_name}` and `{description}` at render time, so a field storing `{title} | {site_name}` renders as `About | Acme Ltd` and never equals what was scanned. The receiver runs the same substitution before comparing, which lets it identify the right field. Writing then replaces the pattern with a literal for that page, and the result is flagged `flattened_template`. A field holding the value verbatim always wins over one that only matches after substitution, since writing to it discards nothing.
 
@@ -198,14 +180,7 @@ Every change carries the value the scan saw. If what is on the site no longer ma
 | `secret` | Shared secret for request signatures. Empty disables the receiver. |
 | `route_prefix` | Where the endpoints mount. Defaults to `!/altimiser`. |
 | `link_minutes` / `summary_minutes` | How long a review link stays valid, and how long the sidebar badge caches its count. |
-| `patch_templates` | Whether template files may be written to at all. |
-| `ai.enabled` | Whether a model may be asked to edit templates the literal patcher cannot handle. |
-| `ai.model` / `ai.prompt` | Model and system prompt for those edits. |
-| `ai.reasoning_effort` | How hard the model thinks. `low` by default; null omits it for models that predate the parameter. |
-| `ai.max_tokens` | Ceiling on the reply, reasoning tokens included. A reply cut short is reported as such. |
-| `ai.retries` | Attempts per call. Rate limits are routine at ten concurrent calls. |
-| `ai.timeout` | Seconds per call. Keep below `time_budget`, or a slow resolve outlives the budget meant to bound it. |
-| `ai.max_files` / `ai.max_bytes` | Ceiling on how much template source is sent per edit. |
+| `patch_templates` | Whether template files may be written to at all, by the literal patcher or by a patch from the agent. |
 | `template_paths` | Directories searched for templates, relative to the app root. |
 | `content_checks` / `asset_checks` / `file_checks` / `template_checks` | Which applier handles which check. |
 | `fields` | Candidate field handles per check group. |

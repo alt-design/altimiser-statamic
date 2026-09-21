@@ -14,7 +14,6 @@ beforeEach(function () {
     config()->set('altimiser.template_paths', [$this->relative]);
     config()->set('altimiser.template_checks', ['image.not_lazy_loaded', 'image.lazy_above_fold']);
 
-    config()->set('altimiser.ai.enabled', false);
     config()->set('altimiser.git.enabled', false);
 
     $this->applier = app(TemplateApplier::class);
@@ -75,14 +74,14 @@ it('refuses when two templates contain the same element', function () {
         ->and($result['message'])->toContain('one.antlers.html');
 });
 
-it('says so when the image comes from a variable and there is no model to ask', function () {
+it('leaves an element built from variables to the agent', function () {
     template('page.antlers.html', '<img src="{{ hero:url }}" alt="{{ hero:alt }}">');
 
     $result = $this->applier->apply(lazyChange(), dryRun: false)->toArray();
 
     expect($result['status'])->toBe('skipped')
         ->and($result['reason'])->toBe('no_match')
-        ->and($result['message'])->toContain('AI editing is not enabled');
+        ->and($result['message'])->toContain('belong to the agent');
 });
 
 it('finds blade templates as well as antlers', function () {

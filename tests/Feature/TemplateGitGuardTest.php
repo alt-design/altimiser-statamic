@@ -1,6 +1,5 @@
 <?php
 
-use AltDesign\Altimiser\Applying\AiTemplateEditor;
 use AltDesign\Altimiser\Applying\ChangeRequest;
 use AltDesign\Altimiser\Applying\GitRepository;
 use AltDesign\Altimiser\Applying\ImageDimensions;
@@ -22,7 +21,6 @@ beforeEach(function () {
     config()->set('altimiser.patch_templates', true);
     config()->set('altimiser.template_paths', [$this->relative]);
     config()->set('altimiser.template_checks', ['image.not_lazy_loaded']);
-    config()->set('altimiser.ai.enabled', false);
     config()->set('altimiser.git.enabled', true);
     config()->set('altimiser.git.message', '[BOT] Altimiser: :check on :url');
 });
@@ -36,7 +34,6 @@ function applierWithGit(GitRepository $git): TemplateApplier
     return new TemplateApplier(
         new TemplatePatcher,
         app(TemplateLocator::class),
-        app(AiTemplateEditor::class),
         $git,
         app(ImageDimensions::class),
     );

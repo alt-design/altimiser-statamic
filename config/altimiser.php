@@ -32,8 +32,8 @@ return [
     'site_url' => env('ALTIMISER_SITE_URL'),
 
     /*
-     * How many changes one request will attempt. Model-driven template edits take
-     * tens of seconds each, so a request that tried to do hundreds would be cut
+     * How many changes one request will attempt. Each one reads and writes files
+     * and makes a commit, so a request that tried to do hundreds would be cut
      * off by the web server. Anything beyond this is reported as deferred and
      * Altimiser asks again.
      */
@@ -50,7 +50,9 @@ return [
 
     /*
      * Templates are only patched when Altimiser can find the exact literal it is
-     * looking for in exactly one place. Set this to false to make the receiver
+     * looking for in exactly one place. Anything built from variables is left
+     * alone here and belongs to the agent, which reads the whole repository and
+     * sends a patch back for review. Set this to false to make the receiver
      * report template findings without ever writing to a file.
      */
     'patch_templates' => env('ALTIMISER_PATCH_TEMPLATES', true),
@@ -80,62 +82,6 @@ return [
         'branch' => env('ALTIMISER_GIT_BRANCH'),
         'message' => env('ALTIMISER_GIT_MESSAGE', '[BOT] Altimiser: :check on :url'),
         'author' => env('ALTIMISER_GIT_AUTHOR', 'Altimiser <altimiser@alt-design.net>'),
-    ],
-
-    /*
-     * When the deterministic patcher cannot find what it is looking for, which
-     * is most of the time on a real site because images and embeds come from
-     * variables rather than literals, a model is asked to make the edit instead.
-     *
-     * It never rewrites a file. It returns one exact search-and-replace, and the
-     * receiver applies it only if the search string appears exactly once in a
-     * file that was offered to it. See EditValidator for the full set of rules.
-     */
-    'ai' => [
-        'enabled' => env('ALTIMISER_AI', false),
-        // Falls back to OPENAI_API_KEY so a site that already talks to OpenAI needs no new variable.
-        'key' => env('ALTIMISER_AI_KEY', env('OPENAI_API_KEY')),
-        'endpoint' => env('ALTIMISER_AI_ENDPOINT', 'https://api.openai.com/v1/chat/completions'),
-        'model' => env('ALTIMISER_AI_MODEL', 'gpt-5-mini'),
-        /*
-         * Kept below time_budget on purpose. A call that outlives the budget it
-         * is being timed against cannot be stopped by it, and the request gets
-         * killed by the web server instead of deferring its work politely.
-         */
-        'timeout' => env('ALTIMISER_AI_TIMEOUT', 30),
-        // Model calls made at once during a batch. Read-only, so they cannot race.
-        'concurrency' => 10,
-        // At ten concurrent calls a rate limit is routine. Without a retry a 429
-        // is indistinguishable from a change that genuinely cannot be made.
-        'retries' => 3,
-        /*
-         * "Find this tag and give me a line range" is not a problem that rewards
-         * thinking for thirty seconds. Set to null for a model that has never
-         * heard of the parameter, which is anything before the reasoning models.
-         */
-        'reasoning_effort' => env('ALTIMISER_AI_REASONING', 'low'),
-        // Reasoning tokens count towards this, so it is not as generous as it looks.
-        'max_tokens' => env('ALTIMISER_AI_MAX_TOKENS', 8000),
-        'max_files' => 12,
-        'max_bytes' => 60000,
-        'prompt' => 'You edit Statamic templates written in Antlers or Blade.
-
-You will be given one SEO or performance fix and the templates that render the
-page, with every line numbered. Find the single tag that produces the reported
-element and return the smallest line range that contains it, plus the
-replacement for those lines.
-
-Rules you must follow:
-- start_line and end_line refer to the numbers shown in the file. Keep the range
-  as small as possible: one line is ideal, and never more than a few.
-- new_text replaces exactly those lines. Do not include the line numbers.
-- Preserve the original indentation, and change nothing except what the fix needs.
-- Never alter Antlers or Blade expressions, variable names, or template logic.
-- Never reformat or reorder attributes, and never touch surrounding markup.
-- If the tag already has the attribute, update its value rather than adding a second.
-- If you cannot find the tag, or the element comes from a partial you were not
-  given, or applying the fix would risk changing what the page renders, set
-  applicable to false and explain why. Declining is always better than guessing.',
     ],
 
     /*
@@ -174,8 +120,18 @@ Rules you must follow:
         'sitemap.not_declared_in_robots',
     ],
 
+    /*
+     * Attributes on elements a template writes out literally. Nothing here needs
+     * a judgement about the page: adding loading="lazy" to a tag is the same
+     * edit wherever that tag is.
+     *
+     * h1.missing is deliberately not on this list. A page with no heading needs
+     * one written, which means deciding what it says, and the only place that
+     * decision can be made safely is with the whole repository open. That is the
+     * agent's, and offering it here is how a page title once got written into a
+     * partial shared with four other pages.
+     */
     'template_checks' => [
-        'h1.missing',
         'image.not_lazy_loaded',
         'image.lazy_above_fold',
         'image.dimensions_missing',

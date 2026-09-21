@@ -35,18 +35,6 @@ class ChangeRequest
         );
     }
 
-    /**
-     * Whether the finding is that an element is absent.
-     *
-     * Worth knowing because everything else here is "this element exists and
-     * wants an attribute", and telling a model an element exists when the whole
-     * finding is that it does not gets it inventing one to satisfy the brief.
-     */
-    public function reportsAMissingElement(): bool
-    {
-        return str_ends_with($this->check, '.missing');
-    }
-
     /** The literal string a template patcher can search source files for. */
     public function matchLiteral(): ?string
     {

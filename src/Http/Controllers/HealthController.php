@@ -4,7 +4,6 @@ namespace AltDesign\Altimiser\Http\Controllers;
 
 use AltDesign\Altimiser\AdvertisedChecks;
 use AltDesign\Altimiser\Altimiser;
-use AltDesign\Altimiser\Applying\AiTemplateEditor;
 use AltDesign\Altimiser\Applying\GitRepository;
 use AltDesign\Altimiser\Integrations\AltSeo;
 use Illuminate\Http\JsonResponse;
@@ -49,10 +48,6 @@ class HealthController
 
         if (config('altimiser.patch_templates')) {
             $capabilities[] = 'template.patch';
-
-            if (app(AiTemplateEditor::class)->isConfigured()) {
-                $capabilities[] = 'template.ai_patch';
-            }
         }
 
         return $capabilities;

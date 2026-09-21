@@ -4,15 +4,11 @@ namespace AltDesign\Altimiser\Applying;
 
 use Throwable;
 
-class TemplateApplier implements Applier, PreparesBatch
+class TemplateApplier implements Applier
 {
-    /** @var array<string, TemplateEdit> resolved ahead of time, keyed by change id */
-    private array $resolved = [];
-
     public function __construct(
         private TemplatePatcher $patcher,
         private TemplateLocator $locator,
-        private AiTemplateEditor $editor,
         private GitRepository $git,
         private ImageDimensions $dimensions,
     ) {}
@@ -27,96 +23,13 @@ class TemplateApplier implements Applier, PreparesBatch
     }
 
     /**
-     * Works out which changes need the model, then resolves them all at once.
-     * Doing it here rather than inside apply() is what turns a batch of ten from
-     * three minutes of sequential calls into about twenty seconds.
+     * Templates are only ever patched where the element is written out as a
+     * literal and lands in exactly one file.
      *
-     * @param  array<int, ChangeRequest>  $changes
-     */
-    public function prepare(array $changes, bool $dryRun): void
-    {
-        if (! $this->editor->isConfigured()) {
-            return;
-        }
-
-        $requests = [];
-        $sharing = [];
-
-        foreach ($changes as $change) {
-            if (! $this->needsModel($change)) {
-                continue;
-            }
-
-            $candidates = $this->candidatesFor($change);
-
-            if ($candidates === []) {
-                continue;
-            }
-
-            // One question per distinct question. An image in a loop appears on
-            // forty pages and arrives as forty changes, every one of them asking
-            // the same thing of the same templates and getting the same answer,
-            // of which thirty-nine are then discarded as already applied. On a
-            // real queue that is 781 changes over 218 actual questions.
-            $question = $this->fingerprint($change, $candidates);
-
-            $sharing[$question][] = $change->id;
-            $requests[$question] ??= ['change' => $change, 'candidates' => $candidates];
-        }
-
-        if ($requests === []) {
-            return;
-        }
-
-        foreach ($this->editor->editMany($requests) as $question => $edit) {
-            foreach ($sharing[$question] as $id) {
-                $this->resolved[$id] = $edit;
-            }
-        }
-    }
-
-    /**
-     * What makes two changes the same question.
-     *
-     * Everything the prompt is built from, so two changes share an answer only
-     * when they would have produced identical requests. The value is in here
-     * because dimensions differ per asset, and the file list is because the same
-     * element on two URLs can be rendered by different templates.
-     *
-     * @param  array<string, string>  $candidates
-     */
-    private function fingerprint(ChangeRequest $change, array $candidates): string
-    {
-        return md5(serialize([
-            $change->check,
-            $change->target['selector'] ?? null,
-            $change->target['attribute'] ?? null,
-            $change->target['context'] ?? null,
-            $change->matchLiteral(),
-            $change->suggestedValue,
-            array_keys($candidates),
-        ]));
-    }
-
-    /**
-     * The deterministic patcher gets first refusal, so only a change it cannot
-     * place is worth spending a model call on.
-     */
-    private function needsModel(ChangeRequest $change): bool
-    {
-        $change = $this->supplyMissingValue($change);
-
-        if ($this->locate($change) !== null) {
-            return false;
-        }
-
-        return $this->alreadySatisfied($change) === null;
-    }
-
-    /**
-     * The deterministic patcher runs first because when it can act it is exact,
-     * free and repeatable. It only sees elements written out as literals, which
-     * on a content-driven site is the minority, so the model handles the rest.
+     * An element built from variables is not this receiver's to edit. Working
+     * out which tag in which partial produces it needs the whole repository in
+     * front of you, and that job belongs to the agent Altimiser runs against
+     * the client's own GitHub checkout, which sends back a reviewed patch.
      */
     public function apply(ChangeRequest $change, bool $dryRun): ChangeResult
     {
@@ -148,10 +61,9 @@ class TemplateApplier implements Applier, PreparesBatch
             return $satisfied;
         }
 
-        // Two templates writing out the same URL is a real ambiguity rather than
-        // something a model should resolve on our behalf. Only the URL counts
-        // here: a class shared by several templates is ordinary, and that is
-        // exactly the case the model is good at.
+        // Two templates writing out the same URL is a real ambiguity, and worth
+        // naming both rather than reporting a flat no_match: it is usually a
+        // partial that got copied instead of included.
         $ambiguous = filled($change->matchLiteral())
             ? $this->literalPatches($change, $change->matchLiteral())
             : [];
@@ -164,13 +76,18 @@ class TemplateApplier implements Applier, PreparesBatch
             );
         }
 
-        return $this->patchByModel($change, $dryRun);
+        return ChangeResult::skipped(
+            $change->id,
+            'no_match',
+            'No template writes this element out as a literal, so it cannot be placed by matching. '
+            .'Findings like this belong to the agent, which works against the repository itself.',
+        );
     }
 
     /**
-     * A value we can work out for ourselves. Dimensions read off a real file are
-     * exact, so they never need a model, and the change arrives without one
-     * precisely because only this side can supply it.
+     * A value we can work out for ourselves. Dimensions read off a real file
+     * are exact, and the change arrives without one precisely because only this
+     * side of the connection can open the asset.
      */
     private function supplyMissingValue(ChangeRequest $change): ChangeRequest
     {
@@ -190,7 +107,7 @@ class TemplateApplier implements Applier, PreparesBatch
     }
 
     /**
-     * Finds the one template this change belongs to, without asking a model.
+     * Finds the one template this change belongs to.
      *
      * Each literal the element offers is tried in turn and the first that lands
      * in exactly one file wins. Anything landing in several is left alone: two
@@ -250,78 +167,6 @@ class TemplateApplier implements Applier, PreparesBatch
         }
 
         return $patches;
-    }
-
-    /**
-     * What the model gets to read. Where a literal narrowed it to a handful of
-     * files, those are the ones: sending the whole render path of a page when we
-     * already know which partial writes the element is both slower and a worse
-     * prompt, because the answer is buried in four files it does not need.
-     *
-     * @return array<string, string>
-     */
-    private function candidatesFor(ChangeRequest $change): array
-    {
-        $narrowed = [];
-
-        foreach ($change->locatorLiterals() as $literal) {
-            $narrowed = [...$narrowed, ...$this->locator->containing($literal)];
-        }
-
-        return $narrowed !== [] ? $narrowed : $this->locator->forUrl($change->path(), $this->tagHint($change));
-    }
-
-    private function patchByModel(ChangeRequest $change, bool $dryRun): ChangeResult
-    {
-        if (! $this->editor->isConfigured()) {
-            return ChangeResult::skipped(
-                $change->id,
-                'no_match',
-                'No template contains this element as a literal, and AI editing is not enabled on this site.',
-            );
-        }
-
-        $candidates = $this->candidatesFor($change);
-        $edit = $this->resolved[$change->id] ?? $this->editor->edit($change, $candidates);
-
-        if (! $edit->usable()) {
-            return ChangeResult::skipped($change->id, 'no_match', $edit->rejection);
-        }
-
-        if (! array_key_exists($edit->file, $candidates)) {
-            return ChangeResult::skipped($change->id, 'no_match', 'The template the edit refers to could not be re-read.');
-        }
-
-        $location = [
-            'type' => 'template',
-            'file' => $edit->file,
-            'resolved_by' => 'model',
-            'reasoning' => $edit->reasoning,
-            'edit' => ['lines' => "{$edit->startLine}-{$edit->endLine}", 'from' => $edit->replaced, 'to' => $edit->replacement],
-        ];
-
-        return $this->write($change, $edit->file, $edit->applyTo($candidates[$edit->file]), $location, $dryRun);
-    }
-
-    /** The element type we are hunting, used to narrow a directory read. */
-    /**
-     * Narrows a directory of partials to the ones that could hold the element.
-     *
-     * Not used where the finding is that the element is absent, and the reason
-     * is worth spelling out: filtering on <h1 for a missing h1 offers only the
-     * files that already have one, which is exactly the set that cannot be the
-     * answer. It is how a fix for a page with no heading came to edit a hero
-     * partial belonging to other pages.
-     */
-    private function tagHint(ChangeRequest $change): ?string
-    {
-        if ($change->reportsAMissingElement()) {
-            return null;
-        }
-
-        $selector = $change->target['selector'] ?? '';
-
-        return preg_match('/^([a-z]+)/i', $selector, $matches) === 1 ? "<{$matches[1]}" : null;
     }
 
     /** @param array<string, mixed> $location */
