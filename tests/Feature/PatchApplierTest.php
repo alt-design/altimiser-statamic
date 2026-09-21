@@ -50,7 +50,7 @@ it('refuses a patch that reaches outside the templates', function () {
 
     expect($result['status'])->toBe('skipped')
         ->and($result['reason'])->toBe('outside_templates')
-        ->and($result['message'])->toContain('not a template on this site');
+        ->and($result['message'])->toContain('not somewhere this site accepts patches');
 });
 
 it('refuses to write over a file somebody else has edited', function () {
@@ -117,4 +117,18 @@ it('applies a patch whose trailing newline was trimmed in transit', function () 
     expect($result['status'])->toBe('applied')
         ->and(file_get_contents($repository.'/resources/views/page.antlers.html'))
         ->toBe("<h1>{{ title }}</h1>\n");
+});
+
+it('accepts a patch that adds a field to a fieldset', function () {
+    // A heading the agent cannot promote without an option to promote it is a
+    // field that has to exist before the template can read it.
+    $result = (new PatchApplier(patchGit()))->apply(templatePatch('resources/fieldsets/page_builder.yaml'), 'Adds a heading level');
+
+    expect($result['status'])->not->toBe('skipped');
+});
+
+it('still refuses content, which a patch can break without showing it', function () {
+    $result = (new PatchApplier(patchGit()))->apply(templatePatch('content/collections/pages/team.md'), 'Fixes');
+
+    expect($result['status'])->toBe('skipped');
 });

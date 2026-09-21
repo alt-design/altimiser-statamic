@@ -62,6 +62,24 @@ return [
     ],
 
     /*
+     * Where a patch from the agent may write, which reaches further than the
+     * literal patcher does.
+     *
+     * A heading the agent cannot promote without an option to promote it is a
+     * field that has to exist before the template can read it, so blueprints and
+     * fieldsets are here too. Adding a field is safe: it is new, it has a
+     * default, and nothing already written refers to it. Removing or renaming
+     * one is not, because the content that used it is not in the patch and
+     * nothing here would see the damage. The agent is told so; this list only
+     * decides where, not what.
+     */
+    'patch_paths' => [
+        'resources/views',
+        'resources/fieldsets',
+        'resources/blueprints',
+    ],
+
+    /*
      * Template edits are committed, one commit per change, so every automated
      * edit is isolated in the history and revertable with git revert.
      *

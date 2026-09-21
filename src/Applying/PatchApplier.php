@@ -46,7 +46,7 @@ class PatchApplier
             return $this->refused('empty', 'The patch names no files.');
         }
 
-        $outside = $this->outsideTemplates($files);
+        $outside = $this->outsideAllowedPaths($files);
 
         if ($outside !== null) {
             return $this->refused('outside_templates', $outside);
@@ -114,17 +114,29 @@ class PatchApplier
         return Process::path(base_path())->timeout(120)->input($input)->run($command);
     }
 
-    /** @param array<int, string> $files */
-    private function outsideTemplates(array $files): ?string
+    /**
+     * Its own list, not the template patcher's.
+     *
+     * A patch may reach further than a literal edit does: a heading the agent
+     * cannot promote without an option to promote it is a field that has to be
+     * added to a fieldset first. Sharing template_paths would have the literal
+     * patcher scanning YAML for img tags, which is wasted work and the wrong
+     * idea besides.
+     *
+     * @param  array<int, string>  $files
+     */
+    private function outsideAllowedPaths(array $files): ?string
     {
+        $allowed = config('altimiser.patch_paths') ?: config('altimiser.template_paths', []);
+
         foreach ($files as $file) {
-            foreach (config('altimiser.template_paths', []) as $allowed) {
-                if (str_starts_with($file, rtrim($allowed, '/').'/')) {
+            foreach ($allowed as $directory) {
+                if (str_starts_with($file, rtrim($directory, '/').'/')) {
                     continue 2;
                 }
             }
 
-            return "The patch changes {$file}, which is not a template on this site.";
+            return "The patch changes {$file}, which is not somewhere this site accepts patches.";
         }
 
         return null;

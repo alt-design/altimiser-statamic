@@ -61,7 +61,7 @@ POST /!/altimiser/patch
 
 The body is the patch and a commit message, signed with the same shared secret as everything else. The receiver:
 
-- refuses anything touching a file outside `template_paths`
+- refuses anything touching a file outside `patch_paths`, which is `resources/views`, `resources/fieldsets` and `resources/blueprints`
 - refuses a working tree with uncommitted changes in the files the patch touches
 - runs `git apply --check` first, so a patch that will not apply cleanly changes nothing
 - applies it and makes one commit, returning the SHA
@@ -181,6 +181,7 @@ Every change carries the value the scan saw. If what is on the site no longer ma
 | `route_prefix` | Where the endpoints mount. Defaults to `!/altimiser`. |
 | `link_minutes` / `summary_minutes` | How long a review link stays valid, and how long the sidebar badge caches its count. |
 | `patch_templates` | Whether template files may be written to at all, by the literal patcher or by a patch from the agent. |
+| `patch_paths` | Where a patch from the agent may write. Reaches further than `template_paths` because a heading the agent cannot promote without an option to promote it is a field that has to exist first. Falls back to `template_paths` when unset. |
 | `template_paths` | Directories searched for templates, relative to the app root. |
 | `content_checks` / `asset_checks` / `file_checks` / `template_checks` | Which applier handles which check. |
 | `fields` | Candidate field handles per check group. |
