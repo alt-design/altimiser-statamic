@@ -53,7 +53,21 @@ class AssetApplier implements Applier
             );
         }
 
-        $current = (string) $asset->get($field);
+        $stored = $asset->get($field);
+
+        // Casting straight to a string is what took the whole batch down when a
+        // site's alt field turned out to be a group rather than a text input.
+        // A field holding something other than text is a blueprint we cannot
+        // write into, which is a skip with a reason, not a fatal.
+        if ($stored !== null && ! is_scalar($stored)) {
+            return ChangeResult::skipped(
+                $change->id,
+                'not_text',
+                "{$field} on this asset holds ".gettype($stored).' rather than text, so there is nothing here to replace.',
+            );
+        }
+
+        $current = (string) $stored;
         $location = ['type' => 'asset', 'asset' => $asset->id(), 'field' => $field];
 
         if ($current === $change->suggestedValue) {
