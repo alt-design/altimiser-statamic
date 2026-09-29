@@ -2,8 +2,11 @@
 
 use AltDesign\Altimiser\AdvertisedChecks;
 use AltDesign\Altimiser\Altimiser;
+use AltDesign\Altimiser\Collections;
+use AltDesign\Altimiser\Globals;
 use AltDesign\Altimiser\Integrations\AltSeo;
 use Composer\InstalledVersions;
+use Statamic\Fields\Field;
 
 /** An Alt SEO whose answers we choose, since the test harness has none installed. */
 function altSeoReporting(bool $installed, bool $schemaEnabled, ?string $version = null): AltSeo
@@ -73,4 +76,43 @@ it('treats a blank default as no default', function () {
     $altSeo->shouldReceive('installed')->andReturn(true);
 
     expect($altSeo->defaults()['title'])->toBeNull();
+});
+
+it('says a loop over a collection renders only where the site allows the tag', function () {
+    $collections = new Collections;
+
+    // Statamic's default: the tag is refused in content, and the list in the
+    // markup renders empty.
+    expect($collections->loopable('partners'))->toBeFalse();
+
+    config()->set('statamic.antlers.allowedContentTags', ['@default', 'collection:*']);
+
+    expect($collections->loopable('partners'))->toBeTrue();
+
+    config()->set('statamic.antlers.allowedContentTags', ['@default', 'collection:news:*']);
+
+    expect($collections->loopable('partners'))->toBeFalse()
+        ->and($collections->loopable('news'))->toBeTrue();
+
+    config()->set('statamic.antlers.guardedContentTags', ['collection:news:*']);
+
+    expect($collections->loopable('news'))->toBeFalse();
+});
+
+it('reports only the single line globals that hold a value', function () {
+    $fields = [
+        'telephone' => new Field('telephone', ['type' => 'text', 'display' => 'Telephone']),
+        'address' => new Field('address', ['type' => 'textarea', 'display' => 'Address']),
+        'fax' => new Field('fax', ['type' => 'text', 'display' => 'Fax']),
+    ];
+
+    // A textarea can hold a line break, which breaks the JSON string it lands
+    // in, and an empty field has nothing for a page to show.
+    expect((new Globals)->fields($fields, [
+        'telephone' => ' +44 (0)7825 123035 ',
+        'address' => "Octagon Point\n5 Cheapside",
+        'fax' => '',
+    ]))->toBe([
+        ['handle' => 'telephone', 'display' => 'Telephone', 'value' => '+44 (0)7825 123035'],
+    ]);
 });

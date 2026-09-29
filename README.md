@@ -35,6 +35,16 @@ For a value that was missing entirely there is nothing to match on, so it falls 
 
 **Structured data.** Alt SEO ships an `alt_seo_schema` field and runs Antlers over it before rendering, so a JSON-LD block written once across a collection stays per-page once the variables resolve. That makes schema a content change rather than a template edit, which is why it goes through the same applier as a meta description: it matches on the value the scan saw, refuses to overwrite anything already there, and Statamic's own git subscriber commits it. Invalid JSON logs to the console and renders nothing, so the failure mode for markup a model wrote is a page without markup rather than a page with broken markup. Where a collection's own blueprint carries the `alt_seo_schema` field, the block is written once as that field's default rather than into every entry, so entries published later inherit it and an entry with its own value keeps it. `pages` is excluded by default, because entries there share a template and nothing else. A collection that already has a default is left alone.
 
+**Lists in structured data.** A page listing a collection's entries, such as a team page or an article index, should loop over the collection rather than carry a list typed out, so `GET /health` reports each collection with a route and whether a loop over it will render. Alt SEO runs the schema field through Antlers as untrusted content, and Statamic refuses the collection tag there unless the site allows it. A refused loop renders an empty list rather than an error, so Altimiser only writes loops over collections reported as loopable. To allow them, add this to `config/statamic/antlers.php`:
+
+```php
+'allowedContentTags' => ['@default', 'collection:*'],
+```
+
+Naming collections instead (`'collection:partners:*'`) keeps the others out of reach of every Antlers enabled content field.
+
+**Globals in structured data.** `GET /health` also reports each global set's single line text fields with their values, so a telephone number or an address in the markup can be `{{ contact:telephone }}` rather than a copy that goes stale when the office moves. Only single line text is reported, since a line break breaks the JSON string it lands in. Altimiser passes a model only the values already shown on the public pages it is describing. A global needs nothing allowing, because a variable is not a tag.
+
 It needs `alt_seo_enable_schema` turned on, which is what swaps in the blueprint variant carrying the field. `GET /health` reports what this site's Alt SEO can do, and the check is withheld from the advertised list when it cannot do it. Offering a check with nowhere to write would mean Altimiser spending a model call per collection generating markup and then refusing every one of them at the last moment. It reports the reason too, so the answer to "why is there no structured data" is a line in the queue rather than an investigation.
 
 **Templates.** Two routes, and which one a finding takes depends on whether the element is written out or built from variables.

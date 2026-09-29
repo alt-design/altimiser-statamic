@@ -5,6 +5,8 @@ namespace AltDesign\Altimiser\Http\Controllers;
 use AltDesign\Altimiser\AdvertisedChecks;
 use AltDesign\Altimiser\Altimiser;
 use AltDesign\Altimiser\Applying\GitRepository;
+use AltDesign\Altimiser\Collections;
+use AltDesign\Altimiser\Globals;
 use AltDesign\Altimiser\Integrations\AltSeo;
 use Illuminate\Http\JsonResponse;
 use Statamic\Facades\Site;
@@ -23,8 +25,27 @@ class HealthController
             'checks' => app(AdvertisedChecks::class)->all(),
             'git' => $this->git(),
             'integrations' => ['alt_seo' => app(AltSeo::class)->state()],
+            'collections' => $this->quietly(fn (): array => app(Collections::class)->all()),
+            'globals' => $this->quietly(fn (): array => app(Globals::class)->all()),
             'site_url' => Site::default()->absoluteUrl(),
         ]);
+    }
+
+    /**
+     * Worth knowing but not worth refusing to answer over, the same as the CMS
+     * version: content Statamic cannot describe costs some structured data its
+     * loops or variables, not the connection.
+     *
+     * @param  callable(): array<int, array<string, mixed>>  $read
+     * @return array<int, array<string, mixed>>
+     */
+    private function quietly(callable $read): array
+    {
+        try {
+            return $read();
+        } catch (Throwable) {
+            return [];
+        }
     }
 
     /**
