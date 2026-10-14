@@ -87,3 +87,27 @@ it('always attempts at least one change so a batch cannot stall', function () {
 
     expect(collect(dispatchAll(1, limit: 1))->where('status', 'deferred'))->toBeEmpty();
 });
+
+it('empties the static cache once when a batch lands, so the confirming scan sees the fix', function () {
+    Statamic\Facades\StaticCache::swap($cache = Mockery::spy());
+
+    dispatchAll(3);
+
+    $cache->shouldHaveReceived('flush')->once();
+});
+
+it('leaves the static cache alone on a dry run', function () {
+    Statamic\Facades\StaticCache::swap($cache = Mockery::spy());
+
+    (new ChangeDispatcher([app(TemplateApplier::class)]))->dispatch([lazyLoadChange(1)], dryRun: true);
+
+    $cache->shouldNotHaveReceived('flush');
+});
+
+it('leaves the static cache alone when nothing landed', function () {
+    Statamic\Facades\StaticCache::swap($cache = Mockery::spy());
+
+    (new ChangeDispatcher([app(TemplateApplier::class)]))->dispatch([lazyLoadChange(1, '/not-on-the-page.svg')], dryRun: false);
+
+    $cache->shouldNotHaveReceived('flush');
+});

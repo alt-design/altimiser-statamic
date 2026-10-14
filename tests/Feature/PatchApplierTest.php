@@ -132,3 +132,21 @@ it('still refuses content, which a patch can break without showing it', function
 
     expect($result['status'])->toBe('skipped');
 });
+
+it('empties the static cache once the templates are written', function () {
+    repositoryWith("<h2>{{ title }}</h2>\n");
+    Statamic\Facades\StaticCache::swap($cache = Mockery::spy());
+
+    (new PatchApplier(patchGit()))->apply(templatePatch(), 'Heading levels');
+
+    $cache->shouldHaveReceived('flush')->once();
+});
+
+it('leaves the static cache alone when the patch is only checked', function () {
+    repositoryWith("<h2>{{ title }}</h2>\n");
+    Statamic\Facades\StaticCache::swap($cache = Mockery::spy());
+
+    (new PatchApplier(patchGit()))->apply(templatePatch(), 'Heading levels', dryRun: true);
+
+    $cache->shouldNotHaveReceived('flush');
+});

@@ -2,6 +2,7 @@
 
 namespace AltDesign\Altimiser\Applying;
 
+use Statamic\Facades\StaticCache;
 use Throwable;
 
 class ChangeDispatcher
@@ -37,7 +38,28 @@ class ChangeDispatcher
             $results[] = ChangeResult::deferred($change->id)->toArray();
         }
 
+        if (! $dryRun && in_array('applied', array_column($results, 'status'), true)) {
+            $this->purgeStaticCache();
+        }
+
         return $results;
+    }
+
+    /**
+     * Once per request, after everything in it has landed.
+     *
+     * Statamic flushes its static cache when content is saved, so an entry edit
+     * looks after itself. A template edit is a file write, which Statamic never
+     * hears about: the cached page went on being served unpatched until the
+     * cache expired, the scan Altimiser runs to confirm a fix read that copy,
+     * and the fix was handed back to the queue as one that did not land.
+     *
+     * A failure here is reported rather than returned, because the changes it
+     * follows are already committed and saying otherwise would be untrue.
+     */
+    private function purgeStaticCache(): void
+    {
+        rescue(fn () => StaticCache::flush());
     }
 
     /**

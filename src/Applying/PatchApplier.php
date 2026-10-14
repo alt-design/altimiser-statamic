@@ -3,6 +3,7 @@
 namespace AltDesign\Altimiser\Applying;
 
 use Illuminate\Support\Facades\Process;
+use Statamic\Facades\StaticCache;
 use Throwable;
 
 /**
@@ -77,6 +78,11 @@ class PatchApplier
         if (! $applied->successful()) {
             return $this->refused('write_failed', trim($applied->errorOutput()));
         }
+
+        // The templates are on disk now whatever the commit does, and Statamic
+        // does not notice a file write, so cached pages would go on showing the
+        // old markup to the scan that confirms the fix.
+        rescue(fn () => StaticCache::flush());
 
         return $this->commit($files, $message);
     }

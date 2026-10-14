@@ -59,6 +59,8 @@ Set `ALTIMISER_PATCH_TEMPLATES=false` to drop template handling entirely and nev
 
 `h1.missing` is deliberately not on the template list. A page with no heading needs one written, which means deciding what it says, and the only place that decision can be made safely is with the whole repository open. Offering it here is how a page title once got written into a partial shared with four other pages.
 
+**Static caching.** A template edit is a file write, and Statamic only clears its static cache when content is saved. Left alone, a site on half or full measure caching would go on serving the unpatched page until the cache expired, and the scan Altimiser runs to confirm a fix would read that copy and hand the fix back as one that did not land. So whenever a request applies something, a batch of changes or a patch, the receiver empties the static cache once at the end. A dry run never does, and on a site without static caching it does nothing.
+
 ## Patches from the agent
 
 The receiver used to ask a model to make the edits the literal patcher could not, one finding at a time, with a dozen files of context. It was the wrong shape for the job. A model given six files and one finding cannot tell that the partial it is editing renders on four other pages, and it has no way to know that the two hundred and thirty eight images with no dimensions are really fifteen images.
