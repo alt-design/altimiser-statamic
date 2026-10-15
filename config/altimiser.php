@@ -121,6 +121,15 @@ return [
     ],
 
     /*
+     * Links written into a page's own words. The first mention of another
+     * page's name in the entry's prose becomes a link to it, adding no words,
+     * and a mention that already links somewhere else is left alone.
+     */
+    'link_checks' => [
+        'link.opportunity',
+    ],
+
+    /*
      * Values that belong to an asset rather than to a page. Alt text describes
      * the image, so it is written once on the asset and every page using it
      * follows.

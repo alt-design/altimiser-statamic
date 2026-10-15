@@ -59,6 +59,14 @@ Set `ALTIMISER_PATCH_TEMPLATES=false` to drop template handling entirely and nev
 
 `h1.missing` is deliberately not on the template list. A page with no heading needs one written, which means deciding what it says, and the only place that decision can be made safely is with the whole repository open. Offering it here is how a page title once got written into a partial shared with four other pages.
 
+**Links between pages.** Where a page already names another page in its own words, `link.opportunity` turns the first mention into a link to it. No words are added or reworded, so nobody needs to rewrite the sentence around the link. Altimiser sends the words as `target.anchor` and the destination as a root relative `target.href`.
+
+The receiver looks through the entry's prose in the order it is stored: Bard fields, Markdown fields and textareas, including those inside page builder sets, Bard sets and grids. The title, the slug, the SEO fields and plain text fields are never touched, since they are labels rather than prose. Matching ignores case and only takes whole words, so "loft conversion" never links half of "loft conversions". Bard gets a link mark on the words, Markdown gets a Markdown link, and a textarea or Bard saved as HTML gets an `<a>` tag. Mentions inside a tag or an image are passed over.
+
+Where the first mention is already a link to somewhere else it is refused as `already_linked` rather than passed over, because somebody chose that link and linking a later mention would put two destinations on one name. Words that are not in the entry at all, usually because a template or a global renders them, are refused as `mention_not_found`. A mention already linked to the right page comes back as already applied.
+
+A revert is the same change with its values swapped. When `suggested_value` is the anchor itself, the link is taken off and the text either side is joined back up, so the content is what it was before. The entry is committed like any other content change. `GET /health` lists `content.link` among its capabilities and `link.opportunity` among its checks.
+
 **Static caching.** A template edit is a file write, and Statamic only clears its static cache when content is saved. Left alone, a site on half or full measure caching would go on serving the unpatched page until the cache expired, and the scan Altimiser runs to confirm a fix would read that copy and hand the fix back as one that did not land. So whenever a request applies something, a batch of changes or a patch, the receiver empties the static cache once at the end. A dry run never does, and on a site without static caching it does nothing.
 
 ## Drafts from content ideas

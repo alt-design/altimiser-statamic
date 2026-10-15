@@ -2,6 +2,7 @@
 
 use AltDesign\Altimiser\AdvertisedChecks;
 use AltDesign\Altimiser\Altimiser;
+use AltDesign\Altimiser\Applying\LinkApplier;
 use AltDesign\Altimiser\Collections;
 use AltDesign\Altimiser\Globals;
 use AltDesign\Altimiser\Integrations\AltSeo;
@@ -115,4 +116,12 @@ it('reports only the single line globals that hold a value', function () {
     ]))->toBe([
         ['handle' => 'telephone', 'display' => 'Telephone', 'value' => '+44 (0)7825 123035'],
     ]);
+});
+
+it('offers to link mentions, through the link applier', function () {
+    $checks = (new AdvertisedChecks(altSeoReporting(installed: true, schemaEnabled: true)))->all();
+
+    expect($checks)->toContain('link.opportunity')
+        ->and(app(LinkApplier::class)->supports('link.opportunity'))->toBeTrue()
+        ->and(app(LinkApplier::class)->supports('title.too_long'))->toBeFalse();
 });
