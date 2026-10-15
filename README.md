@@ -61,6 +61,20 @@ Set `ALTIMISER_PATCH_TEMPLATES=false` to drop template handling entirely and nev
 
 **Static caching.** A template edit is a file write, and Statamic only clears its static cache when content is saved. Left alone, a site on half or full measure caching would go on serving the unpatched page until the cache expired, and the scan Altimiser runs to confirm a fix would read that copy and hand the fix back as one that did not land. So whenever a request applies something, a batch of changes or a patch, the receiver empties the static cache once at the end. A dry run never does, and on a site without static caching it does nothing.
 
+## Drafts from content ideas
+
+```
+POST /!/altimiser/drafts
+```
+
+Altimiser suggests pages to write from the searches a site appears in, and writes a first draft of one from the business's own answers. This endpoint saves that draft as an **unpublished** entry, so an editor finishes it in the control panel and nothing reaches the site until somebody publishes it. Gaps the draft could not fill stay in the text as `[GAP: ...]`, so they cannot be missed.
+
+A new page goes into the collection Altimiser names. A draft that expands an existing page goes beside it, in the same collection with the same blueprint and a slug ending in `-draft`, because writing into the live entry would publish the draft the moment it was saved on a site without revisions.
+
+The body goes into the field an editor would write the page in: a Bard field, then a Markdown field, then a text set in a page builder (one row is added, in the set holding a Bard or Markdown field), then a textarea called something like `content` or `body`. Bard content is converted by that field's own configuration, so it is what typing it would have produced. The title, the slug and the SEO fields are never used for the body, and a blueprint with nowhere suitable is refused with the reason rather than given a field it does not have. The meta description goes into the first field from `altimiser.fields.meta_description` that the blueprint has.
+
+The idea is recorded on the entry as `altimiser_idea`, so sending the same idea again rewrites its draft instead of adding a second one, but only while it is unpublished. A published draft is refused and left alone, and so is one whose file has changes nobody has committed. The entry is committed like any other change Altimiser makes. `GET /health` lists `content.draft` among its capabilities, which is how Altimiser knows an install can take drafts.
+
 ## Patches from the agent
 
 The receiver used to ask a model to make the edits the literal patcher could not, one finding at a time, with a dozen files of context. It was the wrong shape for the job. A model given six files and one finding cannot tell that the partial it is editing renders on four other pages, and it has no way to know that the two hundred and thirty eight images with no dimensions are really fifteen images.
