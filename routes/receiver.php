@@ -1,6 +1,7 @@
 <?php
 
 use AltDesign\Altimiser\Http\Controllers\ChangesController;
+use AltDesign\Altimiser\Http\Controllers\DraftController;
 use AltDesign\Altimiser\Http\Controllers\HealthController;
 use AltDesign\Altimiser\Http\Controllers\PatchController;
 use AltDesign\Altimiser\Http\Middleware\VerifySignature;
@@ -28,4 +29,5 @@ Route::prefix(config('altimiser.route_prefix'))
         Route::get('health', HealthController::class)->name('altimiser.health');
         Route::post('changes', ChangesController::class)->name('altimiser.changes');
         Route::post('patch', PatchController::class)->name('altimiser.patch');
+        Route::post('drafts', DraftController::class)->name('altimiser.drafts');
     });
