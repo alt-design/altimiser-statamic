@@ -180,8 +180,9 @@ class DraftEntries
 
     /**
      * Commits the entry's file where nothing else has, so a site that deploys
-     * from its repository keeps the draft. A database-driven site has no file
-     * and nothing to commit.
+     * from its repository keeps the draft. A database-driven site has no file,
+     * and a site that is not a git checkout has nothing to commit it to; an
+     * unpublished draft is harmless on either.
      *
      * @return array<string, mixed>
      */
@@ -189,7 +190,7 @@ class DraftEntries
     {
         $file = $this->relativePath($entry);
 
-        if ($file === null || ! $this->git->enabled() || $this->git->isClean($file)) {
+        if ($file === null || ! $this->git->enabled() || ! $this->git->isAvailable() || $this->git->isClean($file)) {
             return [];
         }
 
