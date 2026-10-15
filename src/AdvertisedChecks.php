@@ -21,6 +21,7 @@ class AdvertisedChecks
     {
         $checks = [
             ...config('altimiser.content_checks', []),
+            ...config('altimiser.link_checks', []),
             ...config('altimiser.asset_checks', []),
             ...config('altimiser.file_checks', []),
         ];

@@ -7,6 +7,7 @@ use AltDesign\Altimiser\Applying\ChangeDispatcher;
 use AltDesign\Altimiser\Applying\ChangeRequest;
 use AltDesign\Altimiser\Applying\ChangeResult;
 use AltDesign\Altimiser\Applying\ContentApplier;
+use AltDesign\Altimiser\Applying\LinkApplier;
 use AltDesign\Altimiser\Applying\RobotsApplier;
 use AltDesign\Altimiser\Applying\TemplateApplier;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,7 @@ class ChangesController
 
         $dispatcher = new ChangeDispatcher([
             app(ContentApplier::class),
+            app(LinkApplier::class),
             app(AssetApplier::class),
             app(RobotsApplier::class),
             app(TemplateApplier::class),

@@ -65,7 +65,7 @@ class HealthController
     /** @return array<int, string> */
     private function capabilities(): array
     {
-        $capabilities = ['content.update', 'content.draft'];
+        $capabilities = ['content.update', 'content.draft', 'content.link'];
 
         if (config('altimiser.patch_templates')) {
             $capabilities[] = 'template.patch';
