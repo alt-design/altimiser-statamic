@@ -179,3 +179,27 @@ it('only writes alt text on an img tag', function () {
     expect($result['reason'])->toBe('no_match')
         ->and(File::get($path))->toBe('<link rel="preload" href="/img/footer-logo.svg" as="image">');
 });
+
+it('writes alt text over an empty alt when the request carries the scan value as an empty string', function () {
+    config()->set('altimiser.secret', 'shared-secret');
+    require __DIR__.'/../../routes/receiver.php';
+    $path = footerTemplate('<a href="/"><img src="/img/footer-logo.svg" alt="" class="w-[110px]"></a>');
+    $body = json_encode(['dry_run' => false, 'changes' => [[
+        'id' => 'alt',
+        'check' => 'image.alt_empty',
+        'url' => 'https://example.com/',
+        'target' => ['match' => '/img/footer-logo.svg', 'context' => '<img src="/img/footer-logo.svg" alt="" class="w-[110px]">'],
+        'current_value' => '',
+        'suggested_value' => 'Adams & Moore home',
+    ]]]);
+    $timestamp = time();
+
+    $response = $this->call('POST', '/!/altimiser/changes', server: [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_ALTIMISER_TIMESTAMP' => (string) $timestamp,
+        'HTTP_X_ALTIMISER_SIGNATURE' => 'sha256='.hash_hmac('sha256', "{$timestamp}\n{$body}", 'shared-secret'),
+    ], content: $body);
+
+    expect($response->json('results.0'))->toMatchArray(['status' => 'applied'])
+        ->and(File::get($path))->toContain('alt="Adams &amp; Moore home"');
+});
