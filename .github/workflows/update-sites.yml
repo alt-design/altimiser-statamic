@@ -28,16 +28,16 @@ jobs:
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
       SITE: ${{ matrix.site }}
-      GH_TOKEN: ${{ secrets.SITES_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           repository: alt-design/${{ matrix.site }}
           token: ${{ secrets.SITES_TOKEN }}
+          persist-credentials: false
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'
           coverage: none
@@ -46,12 +46,15 @@ jobs:
         run: composer update alt-design/altimiser-statamic --no-install --no-scripts --no-plugins --no-interaction
 
       - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ secrets.SITES_TOKEN }}
         run: |
           if git diff --quiet composer.lock; then
             echo "$SITE: left alone, its constraint does not allow $TAG or it already has it." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
+          gh auth setup-git
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git switch -c "altimiser-statamic-$TAG"
