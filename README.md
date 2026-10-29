@@ -55,6 +55,8 @@ On a real content-driven site it rarely fires. An image rendered as `<img src="{
 
 Two templates writing out the same element is reported as `ambiguous` with both files named, rather than one of them being picked. That is usually a partial somebody copied instead of including.
 
+**Alt text for an image outside the asset library**, such as a logo in `public/img`, goes through the literal patcher too, since there is no asset to hold it. It is placed by the image's `src`, never by a class alone, because a class shared by a card partial would put one image's description on every card. The tag must also carry the class the scan reported, so a decorative copy of the same file in another template is left alone, and it goes only on a plain `<img>` tag whose alt is not built from a variable. Alt text containing template syntax is refused with `invalid_change`, and alt text an editor has changed since the scan is left alone with `value_changed`.
+
 Set `ALTIMISER_PATCH_TEMPLATES=false` to drop template handling entirely and never touch a file.
 
 `h1.missing` is deliberately not on the template list. A page with no heading needs one written, which means deciding what it says, and the only place that decision can be made safely is with the whole repository open. Offering it here is how a page title once got written into a partial shared with four other pages.

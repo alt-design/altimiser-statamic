@@ -11,7 +11,7 @@ class AssetApplier implements Applier
 {
     use CommitsSavedFiles;
 
-    public function __construct(private GitRepository $git) {}
+    public function __construct(private GitRepository $git, private TemplateApplier $templates) {}
 
     public function supports(string $check): bool
     {
@@ -22,6 +22,11 @@ class AssetApplier implements Applier
      * Alt text belongs to the image, not to the page it happens to appear on. An
      * asset used on nine pages has one description, and writing it nine times
      * into nine entries would be nine chances to disagree with itself.
+     *
+     * An image served from the site's own files rather than the asset library,
+     * a logo in public/img say, has no asset to hold it. The tag a template
+     * writes out is then the only place its description can go, and one edit
+     * there still covers every page.
      */
     public function apply(ChangeRequest $change, bool $dryRun): ChangeResult
     {
@@ -37,7 +42,7 @@ class AssetApplier implements Applier
         $asset = $this->locate($source);
 
         if ($asset === null) {
-            return ChangeResult::skipped($change->id, 'no_match', "No asset in this site matches {$source}.");
+            return $this->inTemplate($change, $dryRun, $source);
         }
 
         $field = $this->field($asset);
@@ -127,6 +132,19 @@ class AssetApplier implements Applier
      * The URL in the markup is usually a Glide transform rather than the asset
      * itself, so the original path is read back out of it before asking Statamic.
      */
+    private function inTemplate(ChangeRequest $change, bool $dryRun, string $source): ChangeResult
+    {
+        $result = config('altimiser.patch_templates') ? $this->templates->apply($change, $dryRun) : null;
+
+        return $result === null || $result->reason === 'no_match'
+            ? ChangeResult::skipped(
+                $change->id,
+                'no_match',
+                "No asset in this site matches {$source}, and no template writes its tag out to edit instead.",
+            )
+            : $result;
+    }
+
     private function locate(string $source): ?Asset
     {
         if (preg_match('#/cached-img/containers/([^/]+)/(.+)/[0-9a-f]{32}/[^/]+$#', $source, $matches) === 1) {

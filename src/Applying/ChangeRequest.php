@@ -52,6 +52,10 @@ class ChangeRequest
      * The class attribute usually is, character for character, because that is
      * how people write CSS.
      *
+     * Alt text is the exception. It describes one image, and a class shared by a
+     * partial that renders a different image for every card would put that one
+     * description on all of them, so only the src may place it.
+     *
      * @return array<string, string> kind to literal
      */
     public function locatorLiterals(): array
@@ -59,13 +63,18 @@ class ChangeRequest
         $literals = ['src' => $this->matchLiteral()];
         $context = (string) ($this->target['context'] ?? '');
 
-        foreach (['class', 'id', 'alt'] as $attribute) {
+        foreach ($this->isAltText() ? [] : ['class', 'id', 'alt'] as $attribute) {
             if (preg_match('/\s'.$attribute.'="([^"]+)"/i', $context, $matches) === 1) {
                 $literals[$attribute] = trim($matches[1]);
             }
         }
 
         return array_filter($literals, fn (?string $literal): bool => filled($literal) && mb_strlen($literal) > 3);
+    }
+
+    public function isAltText(): bool
+    {
+        return in_array($this->check, ['image.alt_missing', 'image.alt_empty', 'image.alt_too_long'], true);
     }
 
     public function checkGroup(): string

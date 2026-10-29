@@ -2,6 +2,7 @@
 
 namespace AltDesign\Altimiser\Applying;
 
+use Illuminate\Support\Str;
 use Throwable;
 
 class TemplateApplier implements Applier
@@ -43,6 +44,12 @@ class TemplateApplier implements Applier
             );
         }
 
+        $refused = $this->refuseAltText($change);
+
+        if ($refused !== null) {
+            return $refused;
+        }
+
         $located = $this->locate($change);
 
         if ($located !== null) {
@@ -82,6 +89,33 @@ class TemplateApplier implements Applier
             'No template writes this element out as a literal, so it cannot be placed by matching. '
             .'Findings like this belong to the agent, which works against the repository itself.',
         );
+    }
+
+    /**
+     * Alt text is somebody's writing rather than a fixed attribute value, so it
+     * meets two more rules before it goes into a template. Template syntax in it
+     * would be run rather than shown, and alt text changed since the scan is the
+     * editor's to keep.
+     */
+    private function refuseAltText(ChangeRequest $change): ?ChangeResult
+    {
+        if (! $change->isAltText() || blank($change->matchLiteral())) {
+            return null;
+        }
+
+        if (Str::contains($change->suggestedValue, ['{{', '}}', '{!!', '<?'])) {
+            return ChangeResult::failed($change->id, 'invalid_change', 'Alt text containing template syntax is not written into a template.');
+        }
+
+        foreach ($this->locator->containing($change->matchLiteral()) as $path => $contents) {
+            $alt = $this->patcher->currentAltText($contents, $change);
+
+            if ($alt !== null && ! str_contains($alt, '{{') && ! in_array($alt, [$change->currentValue, $change->suggestedValue], true)) {
+                return ChangeResult::skipped($change->id, 'value_changed', "The alt text in {$path} is no longer what the scan saw.");
+            }
+        }
+
+        return null;
     }
 
     /**
