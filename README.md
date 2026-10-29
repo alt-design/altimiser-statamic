@@ -224,7 +224,7 @@ Every change carries the value the scan saw. If what is on the site no longer ma
 
 ## Releasing
 
-Publish a release on GitHub with a tag such as `v0.9.2`. The Update sites workflow then opens a pull request on every site listed in `.github/workflows/update-sites.yml`, changing only the receiver's entry in the lock file. A site whose constraint does not allow the new version (`^0.9` will not take `v0.10.0`) is left alone and named in the run's summary. To roll out a release again, run the workflow by hand with its tag.
+Publish a release on GitHub with a tag such as `v0.9.2`. The Update sites workflow then opens a pull request on every site listed in `.github/workflows/update-sites.yml`, changing only the receiver's entry in the lock file. A site whose constraint does not allow the new version (`^0.9` will not take `v0.10.0`) is left alone and named in the run's summary. Running the workflow by hand rolls out the newest release each site's constraint allows, and opens nothing for a site already on it.
 
 Every pull request links to the release notes, so put anything a site has to do by hand there: a key to add to a published `config/altimiser.php`, or reconnecting the site from Altimiser so it advertises a new check.
 
