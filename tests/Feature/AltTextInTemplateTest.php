@@ -141,14 +141,16 @@ it('never places alt text by a class shared with other images', function () {
         ->and(File::get($path))->toBe('<img src="{{ card:url }}" class="card-image" alt="">');
 });
 
-it('refuses alt text containing template syntax', function () {
+it('writes template syntax in alt text so it is shown rather than run', function () {
     $path = footerTemplate('<img src="/img/footer-logo.svg" alt="">');
 
-    $result = app(TemplateApplier::class)->apply(altTextChange('Our logo {{ site:name }}'), dryRun: false)->toArray();
+    $change = fn () => altTextChange('Logo {{ site:name }} @php exit @endphp {!! $x !!} <?php');
 
-    expect($result['status'])->toBe('failed')
-        ->and($result['reason'])->toBe('invalid_change')
-        ->and(File::get($path))->toBe('<img src="/img/footer-logo.svg" alt="">');
+    app(TemplateApplier::class)->apply($change(), dryRun: false);
+    $again = app(TemplateApplier::class)->apply($change(), dryRun: false)->toArray();
+
+    expect(File::get($path))->toBe('<img src="/img/footer-logo.svg" alt="Logo &#123;&#123; site:name &#125;&#125; &#64;php exit &#64;endphp &#123;!! $x !!&#125; &lt;?php">')
+        ->and($again['status'])->toBe('already_applied');
 });
 
 it('leaves alt text an editor has changed since the scan', function () {

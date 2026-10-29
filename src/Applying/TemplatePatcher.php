@@ -160,6 +160,10 @@ class TemplatePatcher
     /**
      * Never over an alt the template works out for itself: a literal there would
      * describe one image wherever the expression renders another.
+     *
+     * Braces and @ go in as entities as well as the usual HTML escaping, since
+     * Antlers and Blade read them as syntax: a browser shows the same text, and
+     * no tag or directive can be formed from what a model wrote.
      */
     private function setAltText(string $tag, ChangeRequest $change): ?string
     {
@@ -171,7 +175,9 @@ class TemplatePatcher
             return null;
         }
 
-        return $this->setAttribute($tag, 'alt', htmlspecialchars($change->suggestedValue, ENT_QUOTES | ENT_HTML5));
+        $encoded = strtr(htmlspecialchars($change->suggestedValue, ENT_QUOTES | ENT_HTML5), ['@' => '&#64;', '{' => '&#123;', '}' => '&#125;']);
+
+        return $this->setAttribute($tag, 'alt', $encoded);
     }
 
     /**
