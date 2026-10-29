@@ -132,7 +132,8 @@ return [
     /*
      * Values that belong to an asset rather than to a page. Alt text describes
      * the image, so it is written once on the asset and every page using it
-     * follows.
+     * follows. An image outside the asset library is written into the one
+     * template that writes its tag out instead, where patch_templates allows.
      */
     'asset_checks' => [
         'image.alt_missing',

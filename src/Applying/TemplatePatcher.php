@@ -75,6 +75,13 @@ class TemplatePatcher
             return false;
         }
 
+        // Declining is not the same as done here: alt text is refused on a tag it
+        // cannot safely go on, and that tag has no description at all.
+        if ($change->isAltText()) {
+            return $this->isReportedImage($tag['html'], $change)
+                && $this->attributeOf($tag['html'], 'alt') === $change->suggestedValue;
+        }
+
         $transformed = $this->transform($tag['html'], $change);
 
         // A supported transform that produces no change means the attribute is
@@ -91,12 +98,30 @@ class TemplatePatcher
             'image.dimensions_missing',
             'font.no_display_swap',
             'performance.lcp_not_prioritised',
+            'image.alt_missing',
+            'image.alt_empty',
+            'image.alt_too_long',
         ], true);
+    }
+
+    /**
+     * The alt text a template gives the reported image, or null where the tag
+     * around the literal is some other element or has no alt.
+     */
+    public function currentAltText(string $contents, ChangeRequest $change): ?string
+    {
+        $position = strpos($contents, (string) $change->matchLiteral());
+        $tag = $position === false ? null : $this->tagAround($contents, $position);
+
+        return $tag !== null && $this->isReportedImage($tag['html'], $change)
+            ? $this->attributeOf($tag['html'], 'alt')
+            : null;
     }
 
     private function transform(string $tag, ChangeRequest $change): ?string
     {
         return match ($change->check) {
+            'image.alt_missing', 'image.alt_empty', 'image.alt_too_long' => $this->setAltText($tag, $change),
             'image.not_lazy_loaded', 'iframe.not_lazy_loaded' => $this->setAttribute($tag, 'loading', 'lazy'),
             'image.lazy_above_fold' => $this->setAttribute($tag, 'loading', 'eager'),
             'image.dimensions_missing' => $this->setDimensions($tag, $change->suggestedValue),
@@ -132,14 +157,64 @@ class TemplatePatcher
         return str_replace($literal, $change->suggestedValue, $tag);
     }
 
+    /**
+     * Never over an alt the template works out for itself: a literal there would
+     * describe one image wherever the expression renders another.
+     *
+     * Braces and @ go in as entities as well as the usual HTML escaping, since
+     * Antlers and Blade read them as syntax: a browser shows the same text, and
+     * no tag or directive can be formed from what a model wrote.
+     */
+    private function setAltText(string $tag, ChangeRequest $change): ?string
+    {
+        if (blank($change->suggestedValue) || ! $this->isReportedImage($tag, $change)) {
+            return null;
+        }
+
+        if (str_contains((string) $this->attributeOf($tag, 'alt'), '{{')) {
+            return null;
+        }
+
+        $encoded = strtr(htmlspecialchars($change->suggestedValue, ENT_QUOTES | ENT_HTML5), ['@' => '&#64;', '{' => '&#123;', '}' => '&#125;']);
+
+        return $this->setAttribute($tag, 'alt', $encoded);
+    }
+
+    /**
+     * An img tag that is the element the scan reported, by its class as well as
+     * its src. One file can be a decorative copy in a loading overlay in one
+     * template and a logo linking home in another, and alt text right for one is
+     * wrong for the other.
+     */
+    private function isReportedImage(string $tag, ChangeRequest $change): bool
+    {
+        if (preg_match('/^<img\b[^<>]*>$/i', $tag) !== 1) {
+            return false;
+        }
+
+        $reported = $this->attributeOf((string) ($change->target['context'] ?? ''), 'class');
+        $squash = fn (?string $value): string => trim(preg_replace('/\s+/', ' ', (string) $value) ?? '');
+
+        return $reported === null || $squash($this->attributeOf($tag, 'class')) === $squash($reported);
+    }
+
+    private function attributeOf(string $tag, string $attribute): ?string
+    {
+        $quoted = preg_quote($attribute, '/');
+
+        return preg_match("/\\s{$quoted}\\s*=\\s*([\"'])(.*?)\\1/is", $tag, $matches) === 1
+            ? html_entity_decode($matches[2], ENT_QUOTES | ENT_HTML5)
+            : null;
+    }
+
     private function setAttribute(string $tag, string $attribute, string $value): ?string
     {
         $quoted = preg_quote($attribute, '/');
 
         if (preg_match("/\\s{$quoted}\\s*=\\s*([\"'])(.*?)\\1/i", $tag) === 1) {
-            return preg_replace(
+            return preg_replace_callback(
                 "/(\\s{$quoted}\\s*=\\s*)([\"'])(.*?)\\2/i",
-                "\${1}\${2}{$value}\${2}",
+                fn (array $matches): string => $matches[1].$matches[2].$value.$matches[2],
                 $tag,
                 1,
             );
