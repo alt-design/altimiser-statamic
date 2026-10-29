@@ -1,0 +1,81 @@
+# The agent's steps for a site whose altimiser.yml calls this, so the model, the
+# agent and its flags change here once rather than in every site's repository.
+# Nothing is committed: the diff goes back to Altimiser as an artifact, to be
+# reviewed and applied through the addon.
+name: Altimiser agent (Codex)
+
+on:
+  workflow_call:
+    inputs:
+      brief:
+        type: string
+        required: true
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # Statamic's git automation commits form submissions and user accounts,
+      # and anything the agent reads goes to the model. A template fix never
+      # needs either, so they are left out of the checkout altogether.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /*
+            !/storage/
+            !/users/
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the agent
+        run: npm install -g @openai/codex
+
+      - name: Sign in
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        # Codex reads its credential from a file it writes at login rather than
+        # from the environment, so a key alone gets a 401 with nothing in the
+        # header at all.
+        run: printenv OPENAI_API_KEY | codex login --with-api-key
+
+      # Codex sandboxes itself with bubblewrap, which cannot set up a network
+      # namespace on a GitHub runner and fails with "bwrap: loopback: Failed
+      # RTM_NEWADDR: Operation not permitted". Its sandbox is switched off here
+      # because the runner is already one: it is ephemeral, it holds a checkout
+      # and nothing else, and what may be written is decided by Altimiser's
+      # patch guard when the diff gets home rather than by anything here.
+      - name: Look at the findings
+        env:
+          BRIEF: ${{ inputs.brief }}
+        run: |
+          codex exec "$BRIEF" \
+            --cd "$GITHUB_WORKSPACE" \
+            --model gpt-5.3-codex \
+            --sandbox danger-full-access \
+            --output-last-message /tmp/altimiser.json \
+            --ignore-rules \
+            --color never < /dev/null
+
+      - name: Take the diff
+        run: |
+          git add -A
+          git diff --cached > /tmp/altimiser.patch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: altimiser
+          path: |
+            /tmp/altimiser.patch
+            /tmp/altimiser.json
+          retention-days: 3

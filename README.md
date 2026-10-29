@@ -89,6 +89,8 @@ The receiver used to ask a model to make the edits the literal patcher could not
 
 That work now happens in Altimiser, in a GitHub Actions run against the client's own repository, where an agent has the whole checkout to read. What comes back is a unified diff, reviewed by a person in Altimiser, and sent here as one request.
 
+The run itself is `.github/workflows/agent-codex.yml` or `agent-claude.yml` in this repository. Each site's `altimiser.yml` is a short caller that passes the brief and the site's own API key, so the model, the agent version and its flags are changed here. Callers point at `main`, so a change merged here applies on every site's next run, with no release.
+
 ```
 POST /!/altimiser/patch
 ```
