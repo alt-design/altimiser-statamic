@@ -25,9 +25,11 @@ jobs:
     steps:
       # Statamic's git automation commits form submissions and user accounts,
       # and anything the agent reads goes to the model. A template fix never
-      # needs either, so they are left out of the checkout altogether.
+      # needs either, so they are left out of the checkout altogether, as is
+      # the token git would otherwise keep in .git/config for the agent to read.
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           sparse-checkout: |
             /*
             !/storage/
