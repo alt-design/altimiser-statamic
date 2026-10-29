@@ -136,6 +136,7 @@ return [
      */
     'asset_checks' => [
         'image.alt_missing',
+        'image.alt_empty',
         'image.alt_too_long',
     ],
 
