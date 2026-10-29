@@ -4,10 +4,6 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: The release to roll out, such as v0.9.1
-        required: true
 
 permissions:
   contents: read
@@ -26,7 +22,6 @@ jobs:
           - workplatform-ecomm
 
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
       SITE: ${{ matrix.site }}
 
     steps:
@@ -43,31 +38,35 @@ jobs:
           coverage: none
 
       - name: Update the receiver
-        run: composer update alt-design/altimiser-statamic --no-install --no-scripts --no-plugins --no-interaction
+        run: |
+          locked() { jq -r '.packages[] | select(.name == "alt-design/altimiser-statamic") | .version' composer.lock; }
+          echo "BEFORE=$(locked)" >> "$GITHUB_ENV"
+          composer update alt-design/altimiser-statamic --no-install --no-scripts --no-plugins --no-interaction
+          echo "AFTER=$(locked)" >> "$GITHUB_ENV"
 
       - name: Open a pull request
         env:
           GH_TOKEN: ${{ secrets.SITES_TOKEN }}
         run: |
-          if git diff --quiet composer.lock; then
-            echo "$SITE: left alone, its constraint does not allow $TAG or it already has it." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "$SITE: left alone on $AFTER, the newest release its constraint allows." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
           gh auth setup-git
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git switch -c "altimiser-statamic-$TAG"
-          git commit -qam "Update the Altimiser receiver to $TAG"
-          git push -q -u origin "altimiser-statamic-$TAG"
+          git switch -c "altimiser-statamic-$AFTER"
+          git commit -qam "Update the Altimiser receiver to $AFTER"
+          git push -q -u origin "altimiser-statamic-$AFTER"
 
           cat > /tmp/body.md <<EOF
-          Updates the Altimiser receiver to [$TAG](https://github.com/alt-design/altimiser-statamic/releases/tag/$TAG). Opened by the receiver's Update sites workflow.
+          Updates the Altimiser receiver from $BEFORE to [$AFTER](https://github.com/alt-design/altimiser-statamic/releases/tag/$AFTER). Opened by the receiver's Update sites workflow.
 
-          **Testing:** the lock file changes only the receiver.
+          **Testing:** the lock file changes only the receiver's entry, and the plugin-api-version line where the runner's Composer is newer.
           **Risk:** read the release notes for anything to change by hand, such as a key in a published config/altimiser.php or a reconnect from Altimiser after it deploys.
           **How to revert:** revert the merge commit.
           EOF
 
-          url=$(gh pr create --title "Update the Altimiser receiver to $TAG" --body-file /tmp/body.md)
+          url=$(gh pr create --title "Update the Altimiser receiver to $AFTER" --body-file /tmp/body.md)
           echo "$SITE: $url" >> "$GITHUB_STEP_SUMMARY"
