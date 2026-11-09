@@ -27,7 +27,9 @@ php artisan altimiser:connect https://example.com https://example.com/!/altimise
 
 The review queue page, its dashboard widget and its navigation item need the "Use the Altimiser queue" permission, found under the Altimiser group when editing a role. Super users have it automatically. Any other role that uses the queue must be granted it.
 
-This changes behaviour for existing installs. Before this permission existed, every control panel user could see the queue, so editors who use it today will lose it until their role is updated.
+This changes behaviour for existing installs. Before this permission existed, every control panel user could see the queue, so editors who use it today will lose it until their role is updated. Nothing grants it automatically, and the role still needs "Access the Control Panel".
+
+The permission decides who is given a link to the queue. A link already issued keeps working until it expires, after `link_minutes`, because the queue runs on Altimiser and checks the link's signature rather than the control panel session.
 
 ## What it changes
 
