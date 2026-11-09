@@ -3,10 +3,13 @@
 namespace AltDesign\Altimiser;
 
 use Statamic\Facades\CP\Nav;
+use Statamic\Facades\Permission;
 use Statamic\Providers\AddonServiceProvider;
 
 class ServiceProvider extends AddonServiceProvider
 {
+    public const PERMISSION = 'use altimiser';
+
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/altimiser.php', 'altimiser');
@@ -38,9 +41,24 @@ class ServiceProvider extends AddonServiceProvider
         // panel widget appear or not depending on how the addon was installed.
         Widgets\AltimiserWidget::register();
 
+        $this->registerPermission();
         $this->addNavItem();
 
         parent::boot();
+    }
+
+    /**
+     * Who may use the review queue. Super users pass any registered permission
+     * through Statamic's own gate, so only other roles need it granting.
+     */
+    private function registerPermission(): void
+    {
+        Permission::extend(function () {
+            Permission::group('altimiser', 'Altimiser', function () {
+                Permission::register(self::PERMISSION)
+                    ->label('Use the Altimiser queue');
+            });
+        });
     }
 
     /**
@@ -59,6 +77,7 @@ class ServiceProvider extends AddonServiceProvider
                 // Statamic ships no rocket, and NavItem takes raw SVG as readily
                 // as one of its own names, so this travels with the addon.
                 ->icon(file_get_contents(__DIR__.'/../resources/svg/rocket.svg'))
+                ->can(self::PERMISSION)
                 ->view('altimiser::nav');
         });
     }

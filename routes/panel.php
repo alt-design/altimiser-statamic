@@ -1,6 +1,7 @@
 <?php
 
 use AltDesign\Altimiser\Http\Controllers\ReviewPageController;
+use AltDesign\Altimiser\ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use Statamic\Http\Middleware\CP\SwapExceptionHandler;
 
@@ -23,5 +24,7 @@ Route::name('statamic.cp.')
         'statamic.cp.authenticated',
     ])
     ->group(function () {
-        Route::get('altimiser', ReviewPageController::class)->name('altimiser.index');
+        Route::get('altimiser', ReviewPageController::class)
+            ->name('altimiser.index')
+            ->middleware('can:'.ServiceProvider::PERMISSION);
     });
