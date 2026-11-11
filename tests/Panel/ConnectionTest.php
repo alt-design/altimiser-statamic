@@ -41,6 +41,9 @@ function configureAltimiser(): void
         'altimiser.site_url' => 'https://example.com',
         'altimiser.link_minutes' => 30,
     ]);
+
+    url()->forceScheme('https');
+    url()->forceRootUrl('https://example.com');
 }
 
 function storeConnection(Statamic\Contracts\Auth\User $user, ?string $expiresAt = null): void
@@ -322,4 +325,57 @@ it('keeps the connect routes behind the permission', function () {
     $this->getJson(cp_route('altimiser.connect'))->assertForbidden();
     $this->getJson(cp_route('altimiser.connect.callback'))->assertForbidden();
     $this->postJson(cp_route('altimiser.disconnect'))->assertForbidden();
+});
+
+it('refuses to start connecting when the control panel is not on the site origin', function () {
+    $this->actingAs(editor());
+    url()->forceRootUrl('https://cp.example.com');
+
+    $this->get(cp_route('altimiser.connect'))
+        ->assertRedirect(cp_route('altimiser.index'))
+        ->assertSessionHas('error', fn (string $message) => str_contains($message, 'same address as the site'))
+        ->assertSessionMissing(ConnectController::STATE_KEY);
+});
+
+it('compares scheme and port as well as host, treating default ports as equal', function () {
+    $altimiser = app(Altimiser::class);
+
+    expect($altimiser->isOnSiteOrigin('https://example.com/cp/altimiser'))->toBeTrue()
+        ->and($altimiser->isOnSiteOrigin('https://EXAMPLE.com:443/cp'))->toBeTrue()
+        ->and($altimiser->isOnSiteOrigin('http://example.com/cp'))->toBeFalse()
+        ->and($altimiser->isOnSiteOrigin('https://example.com:8443/cp'))->toBeFalse()
+        ->and($altimiser->isOnSiteOrigin('https://example.org/cp'))->toBeFalse();
+});
+
+it('keeps both entries when two users connect, and writes the file privately', function () {
+    $store = app(ConnectionStore::class);
+    $future = now()->addHour()->toIso8601String();
+    $connection = ['connection' => 'c', 'token' => 't', 'expires_at' => $future, 'account_email' => 'a@b.test'];
+
+    $store->put('1', $connection);
+    $store->put('2', $connection);
+
+    expect($store->live('1'))->not->toBeNull()
+        ->and($store->live('2'))->not->toBeNull()
+        ->and(substr(sprintf('%o', fileperms($store->path())), -4))->toBe('0600');
+});
+
+it('drops expired entries whenever the file is written', function () {
+    $store = app(ConnectionStore::class);
+    $connection = ['connection' => 'c', 'token' => 't', 'account_email' => 'a@b.test'];
+
+    $store->put('old', [...$connection, 'expires_at' => now()->subMinute()->toIso8601String()]);
+    $store->put('new', [...$connection, 'expires_at' => now()->addHour()->toIso8601String()]);
+
+    expect(array_keys(json_decode(File::get($store->path()), true)))->toBe(['new']);
+});
+
+it('lays the frame out to fill the page whatever the connect row holds', function () {
+    $this->actingAs(editor());
+    Http::fake();
+
+    $this->get(cp_route('altimiser.index'))
+        ->assertSee('.altimiser-layout { display: flex; flex-direction: column;', false)
+        ->assertSee('.altimiser-frame { flex: 1 1 auto; min-height: 0; }', false)
+        ->assertDontSee('100vh - 8rem');
 });

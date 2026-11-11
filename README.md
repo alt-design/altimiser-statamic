@@ -209,6 +209,8 @@ A connection lasts twelve hours. After that the link to connect again appears, a
 
 The token is kept per control panel user in `storage/app/altimiser/connections.json`, encrypted with the application key. It is outside `content/` and the users folder, so it is not committed, and it is not in the cache, so clearing the cache does not disconnect anyone. It is never sent to a browser: a link carries only a signature made with it. Keep `storage/app` out of git, as a Laravel install does by default.
 
+The control panel has to be served on the site's own address (scheme, host and port), because Altimiser only sends the person back to that origin. The control panel's session cookie must not be `SameSite=strict` (`SESSION_SAME_SITE`, which is `lax` by default), or the return from Altimiser loses the state and connecting fails every time.
+
 ### The embedded frame
 
 Altimiser returns `frame-ancestors` naming only this site's origin, so nothing else can frame a
