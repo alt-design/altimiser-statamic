@@ -5,6 +5,7 @@ use AltDesign\Altimiser\Connections\ConnectionStore;
 use AltDesign\Altimiser\Http\Controllers\ConnectController;
 use AltDesign\Altimiser\ServiceProvider;
 use AltDesign\Altimiser\Tests\Panel\PanelTestCase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -102,16 +103,11 @@ it('signs the connect link exactly as the protocol document shows', function () 
     );
 });
 
-it('signs a review link with the site secret alone when there is no connection', function () {
-    $this->travelTo(Carbon\Carbon::createFromTimestamp(VECTOR_EXPIRES - 1800));
+it('produces no review link when there is no connection', function () {
     $this->actingAs(editor());
 
-    $url = app(Altimiser::class)->reviewUrl(embedded: true);
-
-    expect($url)->toBe(
-        'https://altimiser.example.com/review?embedded=1&expires=1769558400&site=https%3A%2F%2Fexample.com&user=editor%40example.com'
-        .'&signature=56424ced69568825952d43fb40de622e730610712898c7ecc35cd1b0d1dd2347'
-    )->and($url)->not->toContain('connection');
+    expect(app(Altimiser::class)->reviewUrl())->toBeNull()
+        ->and(app(Altimiser::class)->reviewUrl(embedded: true))->toBeNull();
 });
 
 it('adds the connection and both signatures to a review link as the protocol document shows', function () {
@@ -134,13 +130,16 @@ it('treats an expired connection as not connected', function () {
     storeConnection($user, now()->subMinute()->toIso8601String());
     $this->actingAs($user);
 
-    expect(app(Altimiser::class)->reviewUrl())->not->toContain('connection')
+    expect(app(Altimiser::class)->reviewUrl())->toBeNull()
         ->and(app(Altimiser::class)->currentConnection())->toBeNull();
 
     $this->get(cp_route('altimiser.index'))
         ->assertOk()
         ->assertSee('Connect your Altimiser account')
-        ->assertDontSee('Connected as');
+        ->assertDontSee('Connected as')
+        ->assertDontSee('<iframe', false);
+
+    expect(altimiserWidgetHtml())->not->toContain('altimiser.example.com');
 });
 
 it('does not give one user the connection of another', function () {
@@ -153,15 +152,47 @@ it('does not give one user the connection of another', function () {
     expect(app(Altimiser::class)->currentConnection())->toBeNull();
 });
 
-it('offers to connect, framed safely, with a line saying what it is for', function () {
+it('shows a connect panel and no iframe or review link without a connection', function () {
     $this->actingAs(editor());
+    Http::fake();
 
     $this->get(cp_route('altimiser.index'))
         ->assertOk()
         ->assertSee('Connect your Altimiser account')
+        ->assertSee('Your agency gives you an account')
+        ->assertSee(cp_route('altimiser.connect'), false)
         ->assertSee('target="_top"', false)
-        ->assertSee('agency staff doing developer work')
-        ->assertSee('Reviewing works without it');
+        ->assertDontSee('<iframe', false)
+        ->assertDontSee('altimiser.example.com/review', false);
+});
+
+it('links the widget to the control panel page and never straight to Altimiser', function () {
+    $user = editor();
+    Cache::put('altimiser.summary.'.md5('https://example.com'), ['outstanding' => 3, 'handled' => 2, 'pending' => 1]);
+    $this->actingAs($user);
+
+    $withoutConnection = altimiserWidgetHtml();
+    storeConnection($user);
+    $withConnection = altimiserWidgetHtml();
+
+    foreach ([$withoutConnection, $withConnection] as $html) {
+        expect($html)->toContain('href="'.cp_route('altimiser.index').'"')
+            ->and($html)->not->toContain('altimiser.example.com')
+            ->and($html)->not->toContain('signature');
+    }
+});
+
+it('shows the iframe with the connection and its signature when connected', function () {
+    $user = editor();
+    storeConnection($user);
+    $this->actingAs($user);
+
+    $response = $this->get(cp_route('altimiser.index'))->assertOk();
+    $response->assertSee('<iframe', false)
+        ->assertSee('connection='.VECTOR_CONNECTION, false)
+        ->assertSee('connection_signature=', false)
+        ->assertDontSee('Your agency gives you an account')
+        ->assertDontSee(vectorToken());
 });
 
 it('shows who is connected and until when, without the token', function () {
@@ -223,14 +254,14 @@ it('does not exchange anything for a callback whose state is wrong', function ()
     expect(app(Altimiser::class)->currentConnection())->toBeNull();
 });
 
-it('shows a friendly notice when the person declines', function () {
+it('shows one neutral notice whether the person declined or the account is not allowed', function () {
     Http::fake();
     $this->actingAs(editor());
     $state = startConnecting();
 
     $this->get(callbackUrl(['error' => 'access_denied', 'state' => $state]))
         ->assertRedirect(cp_route('altimiser.index'))
-        ->assertSessionHas('error', 'You chose not to connect your Altimiser account.');
+        ->assertSessionHas('error', 'Your Altimiser account was not connected. If you expected it to be, ask your agency to give your account access to this site.');
 
     Http::assertNothingSent();
 });
@@ -371,7 +402,9 @@ it('drops expired entries whenever the file is written', function () {
 });
 
 it('lays the frame out to fill the page whatever the connect row holds', function () {
-    $this->actingAs(editor());
+    $user = editor();
+    storeConnection($user);
+    $this->actingAs($user);
     Http::fake();
 
     $this->get(cp_route('altimiser.index'))

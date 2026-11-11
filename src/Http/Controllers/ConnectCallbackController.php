@@ -18,7 +18,7 @@ class ConnectCallbackController
         }
 
         if ($request->query('error') === 'access_denied') {
-            return $this->back('error', 'You chose not to connect your Altimiser account.');
+            return $this->back('error', 'Your Altimiser account was not connected. If you expected it to be, ask your agency to give your account access to this site.');
         }
 
         $code = $request->query('code');

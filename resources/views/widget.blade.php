@@ -21,12 +21,12 @@
             </p>
         @else
             <p class="text-sm text-gray-600 mb-4">
-                Counts are unavailable right now, but the review queue should still open.
+                Counts are unavailable right now.
             </p>
         @endif
 
         <div class="mt-auto">
-            <a href="{{ $review_url }}" target="_blank" rel="noopener" class="btn-primary">
+            <a href="{{ $queue_url }}" class="btn-primary">
                 Review changes
             </a>
         </div>

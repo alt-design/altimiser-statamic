@@ -34,36 +34,33 @@ class Altimiser
     }
 
     /**
-     * A signed link into Altimiser's review queue.
+     * A signed link into Altimiser's review queue, carrying the current user's
+     * connection. Without a live connection there is no link at all, because
+     * the queue is only for people who have connected their own account.
      *
-     * Signed here, server side, with the secret the two ends already share. No
-     * credential reaches the browser: the URL carries only a signature that
-     * expires, scoped to this site and to whoever is logged into the control
-     * panel, which is also how Altimiser attributes the approval.
+     * Signed here, server side. No credential reaches the browser: the URL
+     * carries only signatures that expire, scoped to this site and to whoever
+     * is logged into the control panel.
      */
     public function reviewUrl(?int $minutes = null, bool $embedded = false): ?string
     {
-        if (! $this->isConnected()) {
+        $connection = $this->isConnected() ? $this->currentConnection() : null;
+
+        if ($connection === null) {
             return null;
         }
 
-        $connection = $this->currentConnection();
-
         $url = $this->unsignedUrl('/review', [
-            'connection' => $connection['connection'] ?? null,
+            'connection' => $connection['connection'],
             'embedded' => $embedded ? '1' : null,
             'expires' => now()->addMinutes($minutes ?? config('altimiser.link_minutes', 30))->getTimestamp(),
             'site' => $this->siteUrl(),
             'user' => User::current()?->email(),
         ]);
 
-        $signed = $url.'&signature='.$this->sign($url, config('altimiser.secret'));
-
-        if ($connection === null) {
-            return $signed;
-        }
-
-        return $signed.'&connection_signature='.$this->sign($url, $connection['token']);
+        return $url
+            .'&signature='.$this->sign($url, config('altimiser.secret'))
+            .'&connection_signature='.$this->sign($url, $connection['token']);
     }
 
     /** The current control panel user's connection, when it has not expired. */
