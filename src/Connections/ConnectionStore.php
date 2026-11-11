@@ -26,10 +26,11 @@ class ConnectionStore
      */
     public function put(string $userId, array $connection): void
     {
-        $entries = $this->entries();
-        $entries[$userId] = Crypt::encryptString(json_encode($connection, JSON_THROW_ON_ERROR));
+        $this->modify(function (array $entries) use ($userId, $connection): array {
+            $entries[$userId] = Crypt::encryptString(json_encode($connection, JSON_THROW_ON_ERROR));
 
-        $this->write($entries);
+            return $entries;
+        });
     }
 
     /**
@@ -50,11 +51,11 @@ class ConnectionStore
 
     public function forget(string $userId): void
     {
-        $entries = $this->entries();
+        $this->modify(function (array $entries) use ($userId): array {
+            unset($entries[$userId]);
 
-        unset($entries[$userId]);
-
-        $this->write($entries);
+            return $entries;
+        });
     }
 
     /** @return ?array{connection: string, token: string, expires_at: string, account_email: string} */
@@ -62,17 +63,7 @@ class ConnectionStore
     {
         $encrypted = $this->entries()[$userId] ?? null;
 
-        if ($encrypted === null) {
-            return null;
-        }
-
-        try {
-            $connection = json_decode(Crypt::decryptString($encrypted), true, flags: JSON_THROW_ON_ERROR);
-        } catch (Throwable) {
-            return null;
-        }
-
-        return isset($connection['token'], $connection['expires_at'], $connection['connection']) ? $connection : null;
+        return $encrypted === null ? null : $this->open($encrypted);
     }
 
     /** @return array<string, string> */
@@ -82,15 +73,67 @@ class ConnectionStore
             return [];
         }
 
-        $entries = json_decode(File::get($this->path()), true);
+        return $this->decode(File::get($this->path()));
+    }
+
+    /**
+     * Reads, changes and writes the file under one exclusive lock, so two users
+     * connecting at once cannot overwrite each other's entry. Entries that have
+     * expired are dropped on the way out.
+     *
+     * @param  callable(array<string, string>): array<string, string>  $change
+     */
+    private function modify(callable $change): void
+    {
+        File::ensureDirectoryExists(dirname($this->path()));
+
+        $handle = fopen($this->path(), 'c+');
+        chmod($this->path(), 0600);
+        flock($handle, LOCK_EX);
+
+        try {
+            $entries = $this->withoutExpired($change($this->decode((string) stream_get_contents($handle))));
+
+            ftruncate($handle, 0);
+            rewind($handle);
+            fwrite($handle, json_encode($entries, JSON_THROW_ON_ERROR));
+            fflush($handle);
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $entries
+     * @return array<string, string>
+     */
+    private function withoutExpired(array $entries): array
+    {
+        return array_filter($entries, function (string $encrypted): bool {
+            $connection = $this->open($encrypted);
+
+            return $connection !== null && Carbon::parse($connection['expires_at'])->isFuture();
+        });
+    }
+
+    /** @return array<string, string> */
+    private function decode(string $contents): array
+    {
+        $entries = json_decode($contents, true);
 
         return is_array($entries) ? $entries : [];
     }
 
-    /** @param  array<string, string>  $entries */
-    private function write(array $entries): void
+    /** @return ?array{connection: string, token: string, expires_at: string, account_email: string} */
+    private function open(string $encrypted): ?array
     {
-        File::ensureDirectoryExists(dirname($this->path()));
-        File::put($this->path(), json_encode($entries, JSON_THROW_ON_ERROR), true);
+        try {
+            $connection = json_decode(Crypt::decryptString($encrypted), true, flags: JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return isset($connection['token'], $connection['expires_at'], $connection['connection']) ? $connection : null;
     }
 }
