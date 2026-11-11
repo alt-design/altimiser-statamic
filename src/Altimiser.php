@@ -201,15 +201,16 @@ class Altimiser
     }
 
     /**
-     * Outstanding counts for the control panel. Degrades to nothing rather than
-     * breaking the panel: a widget is not worth an error page if Altimiser is
-     * unreachable or still scanning.
+     * Outstanding counts for the control panel, for a user who has connected
+     * their Altimiser account. Degrades to nothing rather than breaking the
+     * panel: a widget is not worth an error page if Altimiser is unreachable or
+     * still scanning.
      *
      * @return ?array<string, mixed>
      */
     public function summary(): ?array
     {
-        if (! $this->isConnected()) {
+        if (! $this->isConnected() || $this->currentConnection() === null) {
             return null;
         }
 

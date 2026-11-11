@@ -182,6 +182,20 @@ it('links the widget to the control panel page and never straight to Altimiser',
     }
 });
 
+it('shows no counts in the widget or the nav until the user has connected', function () {
+    $user = editor();
+    Cache::put('altimiser.summary.'.md5('https://example.com'), ['outstanding' => 3, 'handled' => 2, 'pending' => 1, 'awaiting_review' => 4]);
+    $this->actingAs($user);
+
+    expect(app(Altimiser::class)->summary())->toBeNull()
+        ->and(altimiserWidgetHtml())->toContain('Connect your Altimiser account')->not->toContain('3 open');
+
+    storeConnection($user);
+
+    expect(app(Altimiser::class)->summary()['awaiting_review'])->toBe(4)
+        ->and(altimiserWidgetHtml())->toContain('3 open');
+});
+
 it('shows the iframe with the connection and its signature when connected', function () {
     $user = editor();
     storeConnection($user);

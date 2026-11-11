@@ -12,7 +12,11 @@
             <code>ALTIMISER_SECRET</code> in your environment.
         </p>
     @else
-        @if ($summary)
+        @if (! $linked)
+            <p class="text-sm text-gray-600 mb-4">
+                Connect your Altimiser account to see this site's recommendations.
+            </p>
+        @elseif ($summary)
             <p class="text-sm text-gray-600 mb-4">
                 {{ $summary['handled'] }} this site can act on.
                 @if ($summary['pending'])
