@@ -31,7 +31,7 @@ This changes behaviour for existing installs. Before this permission existed, ev
 
 The permission decides who sees the page, the navigation item and the widget. Nothing in the queue is shown until the person connects their own Altimiser account from the Altimiser page. Until then they see a Connect button and no queue. What they can do once connected is decided by their account's role in Altimiser (Agency or Client), which the agency sets.
 
-A link already issued keeps working until it expires, after `link_minutes`, because the queue runs on Altimiser and checks the link's signatures rather than the control panel session.
+The counts on the widget and the navigation badge are hidden until the person connects as well. Disconnecting forgets the connection here only. Altimiser keeps honouring it until it expires (twelve hours for an agency account, thirty days for a client) unless the agency removes the account's access to the site, which ends it on the next click.
 
 ## What it changes
 
