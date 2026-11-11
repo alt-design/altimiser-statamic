@@ -199,6 +199,18 @@ The counts come from a single signed server-to-server request. It is the only in
 the protocol, it is read-only, and it fails quietly: an unreachable Altimiser costs you the numbers,
 not the page.
 
+### Connecting your Altimiser account
+
+Reviewing and approving fixes needs nothing beyond the permission above. Developer work in Altimiser (asking the agent for a diff, applying a patch to the site's templates, retrying a fix the receiver refused) is kept to people with an Altimiser account, which means agency staff. Everyone else sees those screens read only.
+
+A user with the permission who is not connected sees **Connect your Altimiser account** above the queue. It sends them to Altimiser to sign in and approve, then back to the control panel. From then on their review links carry a second signature made with a token Altimiser issued to them, which is how Altimiser knows the person holds an account.
+
+A connection lasts twelve hours. After that the link to connect again appears, and for someone already signed in to Altimiser it is one click. **Disconnect** forgets the token here straight away. Altimiser is not told, and the connection lapses when it expires.
+
+The token is kept per control panel user in `storage/app/altimiser/connections.json`, encrypted with the application key. It is outside `content/` and the users folder, so it is not committed, and it is not in the cache, so clearing the cache does not disconnect anyone. It is never sent to a browser: a link carries only a signature made with it. Keep `storage/app` out of git, as a Laravel install does by default.
+
+The control panel has to be served on the site's own address (scheme, host and port), because Altimiser only sends the person back to that origin. The control panel's session cookie must not be `SameSite=strict` (`SESSION_SAME_SITE`, which is `lax` by default), or the return from Altimiser loses the state and connecting fails every time.
+
 ### The embedded frame
 
 Altimiser returns `frame-ancestors` naming only this site's origin, so nothing else can frame a

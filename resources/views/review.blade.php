@@ -16,12 +16,25 @@
 
              The width itself is relaxed further down, outside the control panel's
              own markup. --}}
+        <div class="altimiser-layout">
+        <div class="altimiser-connection">
+            @if ($accountEmail)
+                Connected as {{ $accountEmail }} until {{ $connectionExpiresAt->format('j M Y, H:i') }}.
+                <form method="POST" action="{{ cp_route('altimiser.disconnect') }}">
+                    @csrf
+                    <button type="submit">Disconnect</button>
+                </form>
+            @else
+                <a href="{{ cp_route('altimiser.connect') }}" target="_top">Connect your Altimiser account</a>.
+                This is for agency staff doing developer work. Reviewing works without it.
+            @endif
+        </div>
+
         <div class="altimiser-frame">
             <iframe
                 src="{{ $embedUrl }}"
                 title="Altimiser review queue"
-                class="w-full block"
-                style="height: calc(100vh - 5rem); border: 0;"
+                class="altimiser-iframe"
                 {{-- The apply confirmation is a modal rendered in the page rather than a
                      native dialog, precisely because a sandboxed frame may refuse confirm()
                      outright and the one gate before writing to a client's site should not
@@ -29,6 +42,7 @@
                      braces for anything else that reaches for one. --}}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
             ></iframe>
+        </div>
         </div>
     @endunless
 @endsection
@@ -41,6 +55,12 @@
      handed to the control panel's own front end, which drops style tags. --}}
 @section('scripts')
     <style>
+        .altimiser-layout { display: flex; flex-direction: column; height: calc(100vh - 5rem); }
+        .altimiser-connection { flex: 0 0 auto; padding: 0.5rem; font-size: 0.875rem; color: #4b5563; }
+        .altimiser-connection form { display: inline; }
+        .altimiser-connection a, .altimiser-connection button { text-decoration: underline; }
+        .altimiser-frame { flex: 1 1 auto; min-height: 0; }
+        .altimiser-iframe { display: block; width: 100%; height: 100%; border: 0; }
         .max-w-page:has(.altimiser-frame) { max-width: none; }
         .content-card:has(.altimiser-frame) { padding-left: 0; padding-right: 0; }
     </style>
