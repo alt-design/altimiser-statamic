@@ -129,8 +129,8 @@ class AssetApplier implements Applier
     }
 
     /**
-     * The URL in the markup is usually a Glide transform rather than the asset
-     * itself, so the original path is read back out of it before asking Statamic.
+     * With no asset to hold the description, the template that writes the tag
+     * out is the only other place it can go, where patch_templates allows.
      */
     private function inTemplate(ChangeRequest $change, bool $dryRun, string $source): ChangeResult
     {
@@ -145,13 +145,26 @@ class AssetApplier implements Applier
             : $result;
     }
 
+    /**
+     * The URL in the markup is usually a Glide transform rather than the asset
+     * itself, so the original path is read back out of it before asking Statamic.
+     * Glide encodes each part of that path, so image-(4).png arrives as
+     * image-%284%29.png and is decoded before it names a file. A transform of an
+     * asset arrives under containers, and one of a URL under paths.
+     */
     private function locate(string $source): ?Asset
     {
-        if (preg_match('#/cached-img/containers/([^/]+)/(.+)/[0-9a-f]{32}/[^/]+$#', $source, $matches) === 1) {
+        $path = rawurldecode(parse_url($source, PHP_URL_PATH) ?: $source);
+
+        if (preg_match('#/cached-img/containers/([^/]+)/(.+)/[0-9a-f]{32}/[^/]+$#', $path, $matches) === 1) {
             return AssetContainer::find($matches[1])?->asset($matches[2]);
         }
 
-        return Assets::findByUrl(parse_url($source, PHP_URL_PATH) ?: $source);
+        if (preg_match('#/cached-img/paths/(.+)/[0-9a-f]{32}/[^/]+$#', $path, $matches) === 1) {
+            return Assets::findByUrl('/'.ltrim($matches[1], '/'));
+        }
+
+        return Assets::findByUrl($path);
     }
 
     /**
