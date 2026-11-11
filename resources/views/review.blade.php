@@ -10,6 +10,15 @@
                 Altimiser with <code>altimiser:connect</code>.
             </p>
         </div>
+    @elseif ($embedUrl === null)
+        <ui-card class="max-w-lg mx-auto text-center">
+            <ui-heading size="lg" text="Connect your Altimiser account" class="mb-2"></ui-heading>
+            <ui-description class="mb-4">
+                The review queue is on Altimiser. Connect your Altimiser account to use it.
+                Your agency gives you an account.
+            </ui-description>
+            <ui-button href="{{ cp_route('altimiser.connect') }}" target="_top" variant="primary" text="Connect"></ui-button>
+        </ui-card>
     @else
         {{-- Nothing around the frame. The panel carries its own heading and figures,
              so a second set out here only competes with them.
@@ -18,16 +27,11 @@
              own markup. --}}
         <div class="altimiser-layout">
         <div class="altimiser-connection">
-            @if ($accountEmail)
-                Connected as {{ $accountEmail }} until {{ $connectionExpiresAt->format('j M Y, H:i') }}.
-                <form method="POST" action="{{ cp_route('altimiser.disconnect') }}">
-                    @csrf
-                    <button type="submit">Disconnect</button>
-                </form>
-            @else
-                <a href="{{ cp_route('altimiser.connect') }}" target="_top">Connect your Altimiser account</a>.
-                This is for agency staff doing developer work. Reviewing works without it.
-            @endif
+            Connected as {{ $accountEmail }} until {{ $connectionExpiresAt->format('j M Y, H:i') }}.
+            <form method="POST" action="{{ cp_route('altimiser.disconnect') }}">
+                @csrf
+                <button type="submit">Disconnect</button>
+            </form>
         </div>
 
         <div class="altimiser-frame">

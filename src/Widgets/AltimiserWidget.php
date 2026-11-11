@@ -24,7 +24,8 @@ class AltimiserWidget extends Widget
         return view('altimiser::widget', [
             'connected' => $this->altimiser->isConnected(),
             'summary' => $this->altimiser->summary(),
-            'review_url' => $this->altimiser->reviewUrl(),
+            'linked' => $this->altimiser->currentConnection() !== null,
+            'queue_url' => cp_route('altimiser.index'),
         ]);
     }
 }
