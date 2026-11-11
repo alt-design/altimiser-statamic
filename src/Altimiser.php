@@ -75,6 +75,15 @@ class Altimiser
     }
 
     /**
+     * Whether Altimiser would accept this address as a place to send the admin
+     * back to, which it does only on the origin of the site's own URL.
+     */
+    public function isOnSiteOrigin(string $url): bool
+    {
+        return $this->origin($url) === $this->origin($this->siteUrl());
+    }
+
+    /**
      * Where to send an admin to approve connecting to their Altimiser account.
      * The caller keeps the state and checks it when they come back.
      */
@@ -173,6 +182,15 @@ class Altimiser
         ksort($query);
 
         return rtrim(config('altimiser.url'), '/').$path.'?'.http_build_query($query);
+    }
+
+    private function origin(string $url): string
+    {
+        $parts = parse_url($url);
+        $scheme = strtolower($parts['scheme'] ?? '');
+        $port = $parts['port'] ?? ($scheme === 'https' ? 443 : 80);
+
+        return $scheme.'://'.strtolower($parts['host'] ?? '').':'.$port;
     }
 
     private function connections(): ConnectionStore
