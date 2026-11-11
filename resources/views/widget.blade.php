@@ -30,9 +30,7 @@
         @endif
 
         <div class="mt-auto">
-            <a href="{{ $queue_url }}" class="btn-primary">
-                Review changes
-            </a>
+            <ui-button href="{{ $queue_url }}" variant="primary" text="{{ $linked ? 'Review changes' : 'Connect' }}"></ui-button>
         </div>
     @endunless
 </div>

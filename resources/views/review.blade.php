@@ -11,14 +11,14 @@
             </p>
         </div>
     @elseif ($embedUrl === null)
-        <div class="card p-6 max-w-lg mx-auto text-center">
-            <h2 class="font-medium text-lg mb-2">Connect your Altimiser account</h2>
-            <p class="text-gray-700 mb-4">
+        <ui-card class="max-w-lg mx-auto text-center">
+            <ui-heading size="lg" text="Connect your Altimiser account" class="mb-2"></ui-heading>
+            <ui-description class="mb-4">
                 The review queue is on Altimiser. Connect your Altimiser account to use it.
                 Your agency gives you an account.
-            </p>
-            <a href="{{ cp_route('altimiser.connect') }}" target="_top" class="btn-primary">Connect</a>
-        </div>
+            </ui-description>
+            <ui-button href="{{ cp_route('altimiser.connect') }}" target="_top" variant="primary" text="Connect"></ui-button>
+        </ui-card>
     @else
         {{-- Nothing around the frame. The panel carries its own heading and figures,
              so a second set out here only competes with them.
