@@ -5,7 +5,16 @@ namespace AltDesign\Altimiser\Http\Controllers;
 use AltDesign\Altimiser\Altimiser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
 
+/**
+ * Sends the admin to Altimiser's consent screen.
+ *
+ * The control panel follows its own links with Inertia, over XHR, and a plain
+ * redirect to another origin is then blocked by the browser. Inertia::location
+ * answers an Inertia request with a full page visit instead, and anything else
+ * with an ordinary redirect.
+ */
 class ConnectController
 {
     public const STATE_KEY = 'altimiser.connect_state';
@@ -31,6 +40,6 @@ class ConnectController
 
         $request->session()->put(self::STATE_KEY, $state);
 
-        return redirect()->away($url);
+        return Inertia::location($url);
     }
 }

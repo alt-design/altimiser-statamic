@@ -372,6 +372,14 @@ it('keeps the connect routes behind the permission', function () {
     $this->postJson(cp_route('altimiser.disconnect'))->assertForbidden();
 });
 
+it('leaves the control panel with a full page visit when the button is followed by Inertia', function () {
+    $this->actingAs(editor());
+
+    $response = $this->get(cp_route('altimiser.connect'), ['X-Inertia' => 'true'])->assertStatus(409);
+
+    expect($response->headers->get('X-Inertia-Location'))->toStartWith('https://altimiser.example.com/connect?');
+});
+
 it('refuses to start connecting when the control panel is not on the site origin', function () {
     $this->actingAs(editor());
     url()->forceRootUrl('https://cp.example.com');
