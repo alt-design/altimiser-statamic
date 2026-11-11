@@ -1,5 +1,8 @@
 <?php
 
+use AltDesign\Altimiser\Http\Controllers\ConnectCallbackController;
+use AltDesign\Altimiser\Http\Controllers\ConnectController;
+use AltDesign\Altimiser\Http\Controllers\DisconnectController;
 use AltDesign\Altimiser\Http\Controllers\ReviewPageController;
 use AltDesign\Altimiser\ServiceProvider;
 use Illuminate\Support\Facades\Route;
@@ -27,4 +30,10 @@ Route::name('statamic.cp.')
         Route::get('altimiser', ReviewPageController::class)
             ->name('altimiser.index')
             ->middleware('can:'.ServiceProvider::PERMISSION);
+
+        Route::middleware('can:'.ServiceProvider::PERMISSION)->group(function () {
+            Route::get('altimiser/connect', ConnectController::class)->name('altimiser.connect');
+            Route::get('altimiser/connect/callback', ConnectCallbackController::class)->name('altimiser.connect.callback');
+            Route::post('altimiser/disconnect', DisconnectController::class)->name('altimiser.disconnect');
+        });
     });

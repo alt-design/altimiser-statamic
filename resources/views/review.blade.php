@@ -16,12 +16,25 @@
 
              The width itself is relaxed further down, outside the control panel's
              own markup. --}}
+        <div class="altimiser-connection p-2 text-sm text-gray-700">
+            @if ($accountEmail)
+                Connected as {{ $accountEmail }} until {{ $connectionExpiresAt->format('j M Y, H:i') }}.
+                <form method="POST" action="{{ cp_route('altimiser.disconnect') }}" class="inline">
+                    @csrf
+                    <button type="submit" class="underline">Disconnect</button>
+                </form>
+            @else
+                <a href="{{ cp_route('altimiser.connect') }}" target="_top" class="underline">Connect your Altimiser account</a>.
+                This is for agency staff doing developer work. Reviewing works without it.
+            @endif
+        </div>
+
         <div class="altimiser-frame">
             <iframe
                 src="{{ $embedUrl }}"
                 title="Altimiser review queue"
                 class="w-full block"
-                style="height: calc(100vh - 5rem); border: 0;"
+                style="height: calc(100vh - 8rem); border: 0;"
                 {{-- The apply confirmation is a modal rendered in the page rather than a
                      native dialog, precisely because a sandboxed frame may refuse confirm()
                      outright and the one gate before writing to a client's site should not
