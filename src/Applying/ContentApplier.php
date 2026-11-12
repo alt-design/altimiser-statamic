@@ -41,10 +41,10 @@ class ContentApplier implements Applier
             );
         }
 
-        $blueprint = $this->collections->file($change, $entry);
+        $collection = $this->collections->collection($change, $entry);
 
-        if ($blueprint !== null) {
-            return $this->applyToCollection($change, $entry, $blueprint, $dryRun);
+        if ($collection !== null) {
+            return $this->applyToCollection($change, $entry, $collection, $dryRun);
         }
 
         $data = $entry->data()->all();
@@ -116,9 +116,10 @@ class ContentApplier implements Applier
      * Writes the block once, as the collection's default, so every entry in it
      * falls back to the same markup and the next one published inherits it.
      */
-    private function applyToCollection(ChangeRequest $change, object $entry, string $file, bool $dryRun): ChangeResult
+    private function applyToCollection(ChangeRequest $change, object $entry, object $collection, bool $dryRun): ChangeResult
     {
-        $current = $this->collections->current($file);
+        $current = $this->collections->current($collection, $entry);
+        $file = $this->collections->path($collection);
         $location = [
             'type' => 'collection',
             'collection' => $entry->collectionHandle(),
@@ -143,8 +144,12 @@ class ContentApplier implements Applier
             );
         }
 
-        if ($dryRun) {
-            return ChangeResult::applied($change->id, $location, $current, $change->suggestedValue);
+        if (! $this->collections->canonical($collection)) {
+            return ChangeResult::skipped(
+                $change->id,
+                'collection_file_edited',
+                "The {$entry->collectionHandle()} collection's file has been edited by hand, and saving it would rewrite the whole file. The markup needs adding to its inject by a developer.",
+            );
         }
 
         $blocked = $this->gitBlocker($file);
@@ -153,10 +158,15 @@ class ContentApplier implements Applier
             return $blocked->withId($change->id);
         }
 
+        if ($dryRun) {
+            return ChangeResult::applied($change->id, $location, $current, $change->suggestedValue);
+        }
+
         $headBefore = $this->headBefore($file);
+        $before = $this->collections->injected($collection);
 
         try {
-            $this->collections->write($file, $change->suggestedValue);
+            $this->collections->write($collection, $change->suggestedValue);
         } catch (Throwable $exception) {
             return ChangeResult::failed($change->id, 'write_failed', $exception->getMessage());
         }
@@ -164,10 +174,12 @@ class ContentApplier implements Applier
         $committed = $this->commitSaved($file, $headBefore, $change);
 
         if ($committed === null) {
+            $this->collections->restore($collection, $before);
+
             return ChangeResult::failed(
                 $change->id,
                 'write_failed',
-                "The edit to {$file} could not be committed. It is still on disk and needs committing by hand.",
+                "The edit to {$file} could not be committed, so it was put back.",
             );
         }
 
