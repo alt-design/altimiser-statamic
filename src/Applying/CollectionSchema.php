@@ -2,8 +2,7 @@
 
 namespace AltDesign\Altimiser\Applying;
 
-use Statamic\Facades\YAML;
-use Throwable;
+use RuntimeException;
 
 /**
  * Structured data written once for a collection instead of once per entry.
@@ -13,10 +12,10 @@ use Throwable;
  * entries stores the same template thirteen times, and the fourteenth entry,
  * published next week, gets nothing at all.
  *
- * Statamic augments an empty field to its blueprint default, and Alt SEO's tag
- * reads the augmented value, so a default on the collection's own blueprint
- * renders on every entry that has not overridden it. That is the right home for
- * a value the whole collection shares.
+ * It goes in the collection's inject, the values Statamic gives every entry in
+ * a collection that has none of its own. Alt SEO's tag reads the field from
+ * the page, where the injected value is, so nothing about the blueprint has to
+ * change and Alt SEO keeps adding its own tab to it.
  *
  * Only ever a default. An entry that has its own value keeps winning, which is
  * how a default is supposed to behave and how a page that genuinely differs
@@ -27,149 +26,116 @@ class CollectionSchema
     private string $field = 'alt_seo_schema';
 
     /**
-     * The blueprint file this change belongs in, or null to write the entry
+     * The collection this change belongs in, or null to write the entry
      * instead.
      *
      * Null covers every reason not to do this: the feature is off, the check is
      * not one whose value a collection can share, the collection is one whose
-     * entries genuinely differ, the record is a taxonomy term, or the blueprint
-     * does not carry the field. That last one is deliberate: a site that has not
-     * put the field in its collection blueprint has not agreed to this, and
-     * adding it here would take Alt SEO's injected tab away from that
-     * collection along with every other field on it.
+     * entries genuinely differ, or the record is a taxonomy term.
      */
-    public function file(ChangeRequest $change, object $entry): ?string
+    public function collection(ChangeRequest $change, object $entry): ?object
     {
-        if (! config('altimiser.collection_defaults.enabled', true)) {
-            return null;
-        }
-
         if ($change->check !== 'structured_data.missing') {
             return null;
         }
 
-        $collection = method_exists($entry, 'collectionHandle') ? $entry->collectionHandle() : null;
-
-        if (! is_string($collection)) {
+        if (! method_exists($entry, 'collectionHandle') || ! $this->sharesSchema((string) $entry->collectionHandle())) {
             return null;
         }
 
-        if (in_array($collection, config('altimiser.collection_defaults.except', ['pages']), true)) {
-            return null;
-        }
+        $collection = method_exists($entry, 'collection') ? $entry->collection() : null;
 
-        $path = $this->path($entry);
-
-        if ($path === null) {
-            return null;
-        }
-
-        return $this->holdsField($path) ? $path : null;
+        return is_object($collection) ? $collection : null;
     }
 
-    /** What the collection already falls back to, if anything. */
-    public function current(string $file): ?string
+    /** Whether structured data for this collection is written as its default. */
+    public function sharesSchema(string $handle): bool
     {
-        $default = $this->find($this->read($file));
-
-        return is_string($default) ? $default : null;
-    }
-
-    public function write(string $file, string $block): void
-    {
-        $contents = $this->read($file);
-
-        $this->set($contents, $block);
-
-        file_put_contents(base_path($file), YAML::dump($contents));
-    }
-
-    /** @return array<string, mixed> */
-    private function read(string $file): array
-    {
-        try {
-            return YAML::parse(file_get_contents(base_path($file))) ?: [];
-        } catch (Throwable) {
-            return [];
-        }
-    }
-
-    private function holdsField(string $file): bool
-    {
-        return $this->locate($this->read($file)) !== null;
+        return (bool) config('altimiser.collection_defaults.enabled', true)
+            && ! in_array($handle, config('altimiser.collection_defaults.except', ['pages']), true);
     }
 
     /**
-     * The field's own definition, wherever the blueprint keeps it.
+     * What the collection's entries already fall back to, if anything.
      *
-     * Walked rather than addressed by path because a blueprint written for
-     * Statamic 5 calls its top level sections and one written for 6 calls them
-     * tabs, and either may nest the field inside a set or a grid.
-     *
-     * @param  array<mixed>  $contents
-     * @return ?array<string, mixed>
+     * A default in the blueprint counts as much as one injected by the
+     * collection. A site that put one there chose it, and an injected value
+     * would quietly take its place on every entry.
      */
-    private function locate(array $contents): ?array
+    public function current(object $collection, object $entry): ?string
     {
-        if (($contents['handle'] ?? null) === $this->field && is_array($contents['field'] ?? null)) {
-            return $contents['field'];
+        $injected = $collection->cascade($this->field);
+
+        if (is_string($injected) && filled($injected)) {
+            return $injected;
         }
 
-        foreach ($contents as $value) {
-            if (! is_array($value)) {
-                continue;
-            }
+        $blueprint = method_exists($entry, 'blueprint') ? $entry->blueprint() : null;
+        $default = $blueprint?->field($this->field)?->defaultValue();
 
-            $found = $this->locate($value);
-
-            if ($found !== null) {
-                return $found;
-            }
-        }
-
-        return null;
+        return is_string($default) && filled($default) ? $default : null;
     }
 
-    /** @param array<mixed> $contents */
-    private function find(array $contents): ?string
+    /** @return array<string, mixed> */
+    public function injected(object $collection): array
     {
-        $field = $this->locate($contents);
-
-        return is_string($field['default'] ?? null) ? $field['default'] : null;
+        return $collection->cascade()->all();
     }
 
-    /** @param array<mixed> $contents */
-    private function set(array &$contents, string $block): bool
+    /**
+     * Whether saving the collection would change nothing in its file but the
+     * inject.
+     *
+     * Statamic writes a collection's whole file out again from what it read,
+     * which drops comments and any key it does not know and puts the rest in
+     * its own order. A file somebody has edited by hand would come back as a
+     * commit rewriting it, so it is left for a developer instead.
+     */
+    public function canonical(object $collection): bool
     {
-        if (($contents['handle'] ?? null) === $this->field && is_array($contents['field'] ?? null)) {
-            $contents['field']['default'] = $block;
+        $file = $this->path($collection);
 
+        if ($file === null || ! method_exists($collection, 'fileContents')) {
             return true;
         }
 
-        foreach ($contents as &$value) {
-            if (! is_array($value)) {
-                continue;
-            }
-
-            if ($this->set($value, $block)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $collection->fileContents() === file_get_contents(base_path($file));
     }
 
-    /** The blueprint's path relative to the project, or null if it is not in it. */
-    private function path(object $entry): ?string
+    /** @param array<string, mixed> $cascade */
+    public function restore(object $collection, array $cascade): void
     {
-        $blueprint = method_exists($entry, 'blueprint') ? $entry->blueprint() : null;
-        $path = $blueprint === null ? null : $blueprint->path();
+        $this->save($collection->cascade($cascade));
+    }
 
-        if (! is_string($path) || ! str_starts_with($path, base_path().DIRECTORY_SEPARATOR)) {
+    public function write(object $collection, string $block): void
+    {
+        $this->save($collection->cascade([...$this->injected($collection), $this->field => $block]));
+    }
+
+    /**
+     * The collection's file relative to the project, or null where it has none,
+     * which is the case on a database-driven site.
+     */
+    public function path(object $collection): ?string
+    {
+        $path = method_exists($collection, 'path') ? $collection->path() : null;
+
+        if (! is_string($path) || ! str_starts_with($path, base_path().DIRECTORY_SEPARATOR) || ! is_file($path)) {
             return null;
         }
 
         return substr($path, strlen(base_path()) + 1);
+    }
+
+    /**
+     * A listener on CollectionSaving can stop the save, and then nothing is
+     * written while everything after it would report the change as made.
+     */
+    private function save(object $collection): void
+    {
+        if ($collection->save() === false) {
+            throw new RuntimeException("Statamic did not save the {$collection->handle()} collection.");
+        }
     }
 }

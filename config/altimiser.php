@@ -174,14 +174,9 @@ return [
      *
      * The markup is a template with Antlers in it, so every entry in a
      * collection wants the same one, and an entry published next week wants it
-     * too. Statamic augments an empty field to its blueprint default, and Alt
-     * SEO reads the augmented value, so a default on the collection's own
-     * blueprint renders everywhere it is not overridden.
-     *
-     * Only collections whose blueprint already carries the alt_seo_schema field
-     * are written to. Adding the field here would take Alt SEO's injected tab
-     * away from that collection along with every other field on it, so a site
-     * opts in by putting the field in its own blueprint.
+     * too. It is written to the collection's inject, which every entry without
+     * its own value falls back to, so the blueprint is left as it is. A default
+     * already set, injected or in the blueprint, is left alone.
      *
      * except lists the collections whose entries genuinely differ from one
      * another. Pages is the obvious one: a contact page and a service page
