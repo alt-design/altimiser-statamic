@@ -52,7 +52,7 @@ function storeConnection(Statamic\Contracts\Auth\User $user, ?string $expiresAt 
     app(ConnectionStore::class)->put((string) $user->id(), [
         'connection' => VECTOR_CONNECTION,
         'token' => vectorToken(),
-        'expires_at' => $expiresAt ?? '2026-11-12T10:00:00+00:00',
+        'expires_at' => $expiresAt ?? now()->addHours(12)->toIso8601String(),
         'account_email' => 'sam@agency.example',
     ]);
 }
@@ -211,12 +211,13 @@ it('shows the iframe with the connection and its signature when connected', func
 
 it('shows who is connected and until when, without the token', function () {
     $user = editor();
-    storeConnection($user, '2026-11-12T10:00:00+00:00');
+    $expiresAt = now()->addDay();
+    storeConnection($user, $expiresAt->toIso8601String());
     $this->actingAs($user);
 
     $this->get(cp_route('altimiser.index'))
         ->assertOk()
-        ->assertSee('Connected as sam@agency.example until 12 Nov 2026')
+        ->assertSee("Connected as sam@agency.example until {$expiresAt->format('j M Y')}")
         ->assertSee('Disconnect')
         ->assertDontSee(vectorToken());
 });
