@@ -93,6 +93,9 @@ class TemplateApplier implements Applier
     /**
      * Alt text is somebody's writing rather than a fixed attribute value, so alt
      * text changed since the scan is the editor's to keep.
+     *
+     * The scan's empty alt arrives as null on a site running Laravel's
+     * ConvertEmptyStringsToNull middleware, so the two are compared as one.
      */
     private function refuseAltText(ChangeRequest $change): ?ChangeResult
     {
@@ -103,7 +106,7 @@ class TemplateApplier implements Applier
         foreach ($this->locator->containing($change->matchLiteral()) as $path => $contents) {
             $alt = $this->patcher->currentAltText($contents, $change);
 
-            if ($alt !== null && ! str_contains($alt, '{{') && ! in_array($alt, [$change->currentValue, $change->suggestedValue], true)) {
+            if ($alt !== null && ! str_contains($alt, '{{') && ! in_array($alt, [(string) $change->currentValue, $change->suggestedValue], true)) {
                 return ChangeResult::skipped($change->id, 'value_changed', "The alt text in {$path} is no longer what the scan saw.");
             }
         }
