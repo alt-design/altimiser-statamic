@@ -267,3 +267,80 @@ it('substitutes nothing for a title that is not text either', function () {
 
     expect($result['status'])->toBe('applied');
 });
+
+function clearingChange(?string $written = 'About us, what we do and who we do it for.', bool $revert = true): ChangeRequest
+{
+    return new ChangeRequest(
+        id: 'abc',
+        check: 'meta_description.missing',
+        url: 'https://example.com/about',
+        target: [],
+        currentValue: $written,
+        suggestedValue: '',
+        revert: $revert,
+    );
+}
+
+it('clears a field a change filled, so the entry has no value rather than an empty one', function () {
+    $entry = stubbedEntry(['seo_description' => 'About us, what we do and who we do it for.']);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('applied')
+        ->and($result['location']['commit'])->toBe('abc1234')
+        ->and($entry->data)->not->toHaveKey('seo_description');
+});
+
+it('leaves a field alone on a revert once it no longer holds what was written', function () {
+    $entry = stubbedEntry(['seo_description' => 'Somebody rewrote this.']);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('skipped')
+        ->and($result['reason'])->toBe('no_match')
+        ->and($entry->get('seo_description'))->toBe('Somebody rewrote this.');
+});
+
+it('leaves an already empty field alone on a revert', function () {
+    $entry = stubbedEntry(['seo_description' => '']);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('skipped')
+        ->and($result['reason'])->toBe('no_match');
+});
+
+it('puts the value back when committing a clear fails', function () {
+    $entry = stubbedEntry(['seo_description' => 'About us, what we do and who we do it for.']);
+
+    $result = contentApplierWith(contentGit(['commit' => null]), $entry)->apply(clearingChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('failed')
+        ->and($entry->get('seo_description'))->toBe('About us, what we do and who we do it for.');
+});
+
+it('does not clear anything on a dry run', function () {
+    $entry = stubbedEntry(['seo_description' => 'About us, what we do and who we do it for.']);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: true)->toArray();
+
+    expect($result['status'])->toBe('applied')
+        ->and($entry->get('seo_description'))->toBe('About us, what we do and who we do it for.');
+});
+
+it('still refuses an empty value that is not a revert', function () {
+    $entry = stubbedEntry(['seo_description' => 'About us, what we do and who we do it for.']);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(revert: false), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('skipped')
+        ->and($result['reason'])->toBe('no_suggestion')
+        ->and($entry->get('seo_description'))->toBe('About us, what we do and who we do it for.');
+});
+
+it('reads revert from the request payload and defaults it to false', function () {
+    $payload = ['id' => 'abc', 'check' => 'meta_description.missing', 'url' => 'https://example.com/', 'suggested_value' => ''];
+
+    expect(ChangeRequest::fromArray([...$payload, 'revert' => true])->clearsField())->toBeTrue()
+        ->and(ChangeRequest::fromArray($payload)->clearsField())->toBeFalse();
+});

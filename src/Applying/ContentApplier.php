@@ -23,7 +23,7 @@ class ContentApplier implements Applier
 
     public function apply(ChangeRequest $change, bool $dryRun): ChangeResult
     {
-        if (blank($change->suggestedValue)) {
+        if (blank($change->suggestedValue) && ! $change->clearsField()) {
             return ChangeResult::skipped(
                 $change->id,
                 'no_suggestion',
@@ -43,6 +43,14 @@ class ContentApplier implements Applier
 
         $collection = $this->collections->collection($change, $entry);
 
+        if ($collection !== null && $change->clearsField()) {
+            return ChangeResult::skipped(
+                $change->id,
+                'not_clearable',
+                "The {$entry->collectionHandle()} collection's default markup cannot be cleared by a revert.",
+            );
+        }
+
         if ($collection !== null) {
             return $this->applyToCollection($change, $entry, $collection, $dryRun);
         }
@@ -56,7 +64,15 @@ class ContentApplier implements Applier
 
         $current = $entry->get($match->field);
 
-        if (! $this->safeToWrite($match, $current, $change->currentValue)) {
+        if ($change->clearsField() && ! $this->holdsWhatWasWritten($match, $current, $change->currentValue)) {
+            return ChangeResult::skipped(
+                $change->id,
+                'value_changed',
+                "The {$match->field} field has changed since Altimiser wrote it, so it was left alone.",
+            );
+        }
+
+        if (! $change->clearsField() && ! $this->safeToWrite($match, $current, $change->currentValue)) {
             return ChangeResult::skipped(
                 $change->id,
                 'value_changed',
@@ -79,13 +95,13 @@ class ContentApplier implements Applier
         }
 
         if ($dryRun) {
-            return ChangeResult::applied($change->id, $location, $this->asString($current), $change->suggestedValue);
+            return ChangeResult::applied($change->id, $location, $this->asString($current), $this->written($change));
         }
 
         $headBefore = $this->headBefore($file);
 
         try {
-            $entry->set($match->field, $change->suggestedValue)->save();
+            $this->write($entry, $match->field, $change);
         } catch (Throwable $exception) {
             return ChangeResult::failed($change->id, 'write_failed', $exception->getMessage());
         }
@@ -108,7 +124,7 @@ class ContentApplier implements Applier
             $change->id,
             [...$location, ...$committed],
             $this->asString($current),
-            $change->suggestedValue,
+            $this->written($change),
         );
     }
 
@@ -199,6 +215,31 @@ class ContentApplier implements Applier
         }
 
         return substr($path, strlen(base_path()) + 1);
+    }
+
+    private function write(object $entry, string $field, ChangeRequest $change): void
+    {
+        $change->clearsField()
+            ? $entry->remove($field)->save()
+            : $entry->set($field, $change->suggestedValue)->save();
+    }
+
+    private function written(ChangeRequest $change): ?string
+    {
+        return $change->clearsField() ? null : $change->suggestedValue;
+    }
+
+    /**
+     * A clear is only safe while the field still holds what Altimiser wrote. An
+     * inherited match means the field holds nothing of ours, so there is nothing
+     * to clear and no way to tell what the page is rendering from.
+     */
+    private function holdsWhatWasWritten(FieldMatch $match, mixed $current, ?string $written): bool
+    {
+        return ! $match->inherited
+            && filled($written)
+            && is_scalar($current)
+            && ($match->flattensTemplate || $this->values->equivalent((string) $current, $written));
     }
 
     private function restore(object $entry, FieldMatch $match, mixed $current): void

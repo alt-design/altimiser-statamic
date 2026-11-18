@@ -30,7 +30,7 @@ class AssetApplier implements Applier
      */
     public function apply(ChangeRequest $change, bool $dryRun): ChangeResult
     {
-        if (blank($change->suggestedValue)) {
+        if (blank($change->suggestedValue) && ! $change->clearsField()) {
             return ChangeResult::skipped(
                 $change->id,
                 'no_suggestion',
@@ -75,6 +75,10 @@ class AssetApplier implements Applier
         $current = (string) $stored;
         $location = ['type' => 'asset', 'asset' => $asset->id(), 'field' => $field];
 
+        if ($change->clearsField()) {
+            return $this->clear($change, $asset, $field, $current, $location, $dryRun);
+        }
+
         if ($current === $change->suggestedValue) {
             return ChangeResult::alreadyApplied($change->id, $location, "{$field} already says this.");
         }
@@ -110,6 +114,56 @@ class AssetApplier implements Applier
         }
 
         return ChangeResult::applied($change->id, [...$location, ...$committed], $current, $change->suggestedValue);
+    }
+
+    /**
+     * Takes the description off an image Altimiser filled in, so the asset goes
+     * back to having none. Only while it still says what Altimiser wrote.
+     *
+     * @param  array<string, mixed>  $location
+     */
+    private function clear(ChangeRequest $change, Asset $asset, string $field, string $current, array $location, bool $dryRun): ChangeResult
+    {
+        if ($current === '') {
+            return ChangeResult::alreadyApplied($change->id, $location, "{$field} is already empty.");
+        }
+
+        if ($current !== (string) $change->currentValue) {
+            return ChangeResult::skipped(
+                $change->id,
+                'value_changed',
+                "The {$field} field has changed since Altimiser wrote it, so it was left alone.",
+            );
+        }
+
+        $file = $this->metaFile($asset);
+        $blocked = $this->gitBlocker($file);
+
+        if ($blocked !== null) {
+            return $blocked->withId($change->id);
+        }
+
+        if ($dryRun) {
+            return ChangeResult::applied($change->id, $location, $current, null);
+        }
+
+        $headBefore = $this->headBefore($file);
+
+        $asset->remove($field)->save();
+
+        $committed = $this->commitSaved($file, $headBefore, $change);
+
+        if ($committed === null) {
+            $asset->set($field, $current)->save();
+
+            return ChangeResult::failed(
+                $change->id,
+                'write_failed',
+                "The edit to {$file} could not be committed, so it was put back.",
+            );
+        }
+
+        return ChangeResult::applied($change->id, [...$location, ...$committed], $current, null);
     }
 
     /** Null where the container is on a remote disk, which git cannot speak for. */

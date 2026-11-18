@@ -20,6 +20,7 @@ class ChangeRequest
          * service that raised the finding knows which it is.
          */
         public bool $pageSpecific = false,
+        public bool $revert = false,
     ) {}
 
     public static function fromArray(array $data): self
@@ -32,7 +33,14 @@ class ChangeRequest
             currentValue: $data['current_value'] ?? null,
             suggestedValue: $data['suggested_value'] ?? null,
             pageSpecific: (bool) ($data['page_specific'] ?? false),
+            revert: (bool) ($data['revert'] ?? false),
         );
+    }
+
+    /** Whether this puts a field back to having no value, which only a revert may ask for. */
+    public function clearsField(): bool
+    {
+        return $this->revert && blank($this->suggestedValue);
     }
 
     /** The literal string a template patcher can search source files for. */
