@@ -35,6 +35,45 @@ class FieldResolver
     }
 
     /**
+     * Finds the field a revert should clear. Unlike a normal change this never
+     * falls back to an inherited override: there is nothing to write, so a field
+     * that no longer holds the value is either already clear or edited since.
+     *
+     * @param  array<string, mixed>  $data  the entry's current field values
+     * @param  array<int, string>  $blueprintFields  every field handle the blueprint defines
+     * @param  array<string, string>  $variables  substitutions such as title and site_name
+     */
+    public function resolveForClear(ChangeRequest $change, array $data, array $blueprintFields, array $variables = []): FieldMatch
+    {
+        $candidates = config("altimiser.fields.{$change->checkGroup()}", []);
+
+        $match = filled($change->currentValue)
+            ? $this->fieldHoldingValue($change->currentValue, $data, $candidates, $variables)
+            : FieldMatch::failed('no_match', 'There is no written value to look for.');
+
+        if ($match->matched() || $match->reason === 'ambiguous') {
+            return $match;
+        }
+
+        $present = array_values(array_filter(
+            $candidates,
+            fn (string $candidate): bool => in_array($candidate, $blueprintFields, true) || array_key_exists($candidate, $data),
+        ));
+
+        $edited = array_values(array_filter($present, fn (string $candidate): bool => filled($data[$candidate] ?? null)));
+
+        if ($edited !== []) {
+            return FieldMatch::failed('value_changed', "The {$edited[0]} field has changed since Altimiser wrote it, so it was left alone.");
+        }
+
+        if ($present !== []) {
+            return FieldMatch::empty($present[0]);
+        }
+
+        return FieldMatch::failed('no_match', 'The blueprint defines none of the expected fields ('.implode(', ', $candidates).').');
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @param  array<int, string>  $candidates
      * @param  array<string, string>  $variables
