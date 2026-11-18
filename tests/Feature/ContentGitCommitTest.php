@@ -297,7 +297,7 @@ it('leaves a field alone on a revert once it no longer holds what was written', 
     $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: false)->toArray();
 
     expect($result['status'])->toBe('skipped')
-        ->and($result['reason'])->toBe('no_match')
+        ->and($result['reason'])->toBe('value_changed')
         ->and($entry->get('seo_description'))->toBe('Somebody rewrote this.');
 });
 
@@ -306,8 +306,28 @@ it('leaves an already empty field alone on a revert', function () {
 
     $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: false)->toArray();
 
+    expect($result['status'])->toBe('already_applied');
+});
+
+it('does not call an edited field already empty because another candidate is empty', function () {
+    config()->set('altimiser.fields', ['meta_description' => ['seo_description', 'meta_description']]);
+    $entry = stubbedEntry(['seo_description' => 'Somebody rewrote this.', 'meta_description' => '']);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: false)->toArray();
+
     expect($result['status'])->toBe('skipped')
-        ->and($result['reason'])->toBe('no_match');
+        ->and($result['reason'])->toBe('value_changed');
+});
+
+it('clears the candidate that holds the value when another candidate is empty', function () {
+    config()->set('altimiser.fields', ['meta_description' => ['meta_description', 'seo_description']]);
+    $entry = stubbedEntry(['meta_description' => '', 'seo_description' => 'About us, what we do and who we do it for.']);
+
+    $result = contentApplierWith(contentGit(), $entry)->apply(clearingChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('applied')
+        ->and($result['location']['field'])->toBe('seo_description')
+        ->and($entry->data)->not->toHaveKey('seo_description');
 });
 
 it('puts the value back when committing a clear fails', function () {

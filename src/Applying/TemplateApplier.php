@@ -33,6 +33,14 @@ class TemplateApplier implements Applier
      */
     public function apply(ChangeRequest $change, bool $dryRun): ChangeResult
     {
+        if ($change->clearsField()) {
+            return ChangeResult::skipped(
+                $change->id,
+                'not_clearable',
+                'A template edit cannot be undone by clearing a value. Use git to revert it.',
+            );
+        }
+
         $change = $this->supplyMissingValue($change);
 
         if (blank($change->suggestedValue) && $change->check !== 'image.dimensions_missing') {

@@ -41,6 +41,14 @@ class AssetApplier implements Applier
         $source = $change->target['match'] ?? '';
         $asset = $this->locate($source);
 
+        if ($asset === null && $change->clearsField()) {
+            return ChangeResult::skipped(
+                $change->id,
+                'not_clearable',
+                "No asset in this site matches {$source}, and a template edit cannot be cleared by a revert.",
+            );
+        }
+
         if ($asset === null) {
             return $this->inTemplate($change, $dryRun, $source);
         }

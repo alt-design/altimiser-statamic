@@ -10,6 +10,7 @@ class FieldMatch
         public ?string $message,
         public bool $inherited = false,
         public bool $flattensTemplate = false,
+        public bool $empty = false,
     ) {}
 
     public static function found(string $field): self
@@ -31,6 +32,12 @@ class FieldMatch
     public static function flattening(string $field): self
     {
         return new self($field, null, null, flattensTemplate: true);
+    }
+
+    /** The field is there and has no value, so a clear has nothing left to do. */
+    public static function empty(string $field): self
+    {
+        return new self($field, null, null, empty: true);
     }
 
     public static function failed(string $reason, string $message): self

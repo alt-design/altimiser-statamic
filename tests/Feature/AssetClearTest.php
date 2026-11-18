@@ -98,3 +98,36 @@ it('advertises that it can clear a field', function () {
 
     expect($capabilities)->toContain('content.clear');
 });
+
+it('refuses a revert for an image with no asset rather than sending it to the template path', function () {
+    config()->set('altimiser.patch_templates', true);
+
+    $assets = Mockery::mock();
+    $assets->shouldReceive('findByUrl')->andReturn(null);
+    Asset::swap($assets);
+
+    $templates = Mockery::mock(TemplateApplier::class);
+    $templates->shouldNotReceive('apply');
+
+    $result = (new AssetApplier(Mockery::mock(GitRepository::class), $templates))->apply(clearAltChange(), dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('skipped')
+        ->and($result['reason'])->toBe('not_clearable');
+});
+
+it('never re-applies dimensions for a revert', function () {
+    $change = new ChangeRequest(
+        id: 'abc',
+        check: 'image.dimensions_missing',
+        url: 'https://example.com/',
+        target: ['match' => '/img/logo.png'],
+        currentValue: '120x40',
+        suggestedValue: '',
+        revert: true,
+    );
+
+    $result = app(TemplateApplier::class)->apply($change, dryRun: false)->toArray();
+
+    expect($result['status'])->toBe('skipped')
+        ->and($result['reason'])->toBe('not_clearable');
+});

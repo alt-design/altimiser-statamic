@@ -56,21 +56,23 @@ class ContentApplier implements Applier
         }
 
         $data = $entry->data()->all();
-        $match = $this->resolver->resolve($change, $data, $this->blueprintFields($entry), $this->variables($entry));
+        $match = $change->clearsField()
+            ? $this->resolver->resolveForClear($change, $data, $this->blueprintFields($entry), $this->variables($entry))
+            : $this->resolver->resolve($change, $data, $this->blueprintFields($entry), $this->variables($entry));
 
         if (! $match->matched()) {
             return ChangeResult::skipped($change->id, $match->reason, $match->message);
         }
 
-        $current = $entry->get($match->field);
-
-        if ($change->clearsField() && ! $this->holdsWhatWasWritten($match, $current, $change->currentValue)) {
-            return ChangeResult::skipped(
+        if ($match->empty) {
+            return ChangeResult::alreadyApplied(
                 $change->id,
-                'value_changed',
-                "The {$match->field} field has changed since Altimiser wrote it, so it was left alone.",
+                [...$this->describe($entry), 'field' => $match->field],
+                "{$match->field} is already empty.",
             );
         }
+
+        $current = $entry->get($match->field);
 
         if (! $change->clearsField() && ! $this->safeToWrite($match, $current, $change->currentValue)) {
             return ChangeResult::skipped(
@@ -219,27 +221,18 @@ class ContentApplier implements Applier
 
     private function write(object $entry, string $field, ChangeRequest $change): void
     {
-        $change->clearsField()
-            ? $entry->remove($field)->save()
-            : $entry->set($field, $change->suggestedValue)->save();
+        if ($change->clearsField()) {
+            $entry->remove($field)->save();
+
+            return;
+        }
+
+        $entry->set($field, $change->suggestedValue)->save();
     }
 
     private function written(ChangeRequest $change): ?string
     {
         return $change->clearsField() ? null : $change->suggestedValue;
-    }
-
-    /**
-     * A clear is only safe while the field still holds what Altimiser wrote. An
-     * inherited match means the field holds nothing of ours, so there is nothing
-     * to clear and no way to tell what the page is rendering from.
-     */
-    private function holdsWhatWasWritten(FieldMatch $match, mixed $current, ?string $written): bool
-    {
-        return ! $match->inherited
-            && filled($written)
-            && is_scalar($current)
-            && ($match->flattensTemplate || $this->values->equivalent((string) $current, $written));
     }
 
     private function restore(object $entry, FieldMatch $match, mixed $current): void
